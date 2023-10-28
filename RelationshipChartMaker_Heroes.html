@@ -1,0 +1,293 @@
+<html>
+
+<head>
+  <meta charset="utf8" />
+  <link rel="stylesheet" href="/css/main.css?20181201" type="text/css" />
+</head>
+
+<body>
+  <p>
+    FEHの英雄相関図を簡単に作れるツールです。2人のキャラとその関係を入力すると関係を1つ追加できます。関係は+ボタンで増やす事ができます。
+  </p>
+  <p>
+    できた人物相関図は画像として保存できますが、端末によっては正しく保存できないことがあります。
+  </p>
+  <p>邪魔な位置に広告が表示された場合はお手数ですがページのリロードをお願いします。</p>
+  <style>
+    .charOptionSelect {
+      width: 220px;
+
+    }
+
+    .editByTextButton {
+      vertical-align: bottom;
+      float: right;
+      background-image: url('/images/720_pe_h.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      width: 28px;
+      height: 28px;
+      border-style: none;
+    }
+
+    .darken {
+      filter: brightness(70%);
+    }
+
+    .manualTextbox {
+      font-size: 18px;
+      width: 220px;
+      vertical-align: bottom;
+    }
+
+    .iconButton {
+      background-size: contain;
+      background-repeat: no-repeat;
+      width: 32px;
+      height: 32px;
+      border-style: none;
+    }
+  </style>
+  <div id="app" style="text-align: left;">
+    <p>
+      タイトル: <select v-model="currentTitle" style="font-size: 18px;">
+        <option v-for="option in titleOptions" v-bind:value="option.id">
+          {{ option.text }}
+        </option>
+      </select>
+    </p>
+    <details>
+      <summary>グループの設定</summary>
+      <input id="showsCluster" v-model="showsCluster" type="checkbox" @change="updateGraph();"><label
+        for="showsCluster">グループを表示する</label>
+      <table>
+        <tr>
+          <th style="padding:0;text-align: left;"><input type="button"
+              @click="g_appData.createNewCluster();g_app.$forceUpdate();"
+              style="background-image: url('/images/add.png');" class="iconButton" /></th>
+          <th>グループ名</th>
+          <th>背景色</th>
+          <th>所属キャラ</th>
+        </tr>
+        <tr v-for="cluster in clusters">
+          <td style="vertical-align: top;"><input type="button"
+              @click="g_appData.removeCluster(cluster);updateGraphAuto();"
+              style="background-image: url('/images/remove.png');" class="iconButton" /></td>
+          <td style="vertical-align: top;">
+            <input type="text" class="manualTextbox" v-model="cluster.label"
+              @change="g_appData.syncClusterLabelToOption(cluster);updateGraphAuto()" />
+          </td>
+          <td style="vertical-align: top;">
+            <input type="color" v-model="cluster.color" @change="updateGraphAuto()">
+          </td>
+          <td style="width: 290px;">
+            <input type="button" @click="g_appData.addEmptyNodeToCluster(cluster)"
+              style="background-image: url('/images/add.png');" class="iconButton" />
+
+            <div style="float:right">
+              <table>
+                <tr v-for="node in cluster.belongingNodes">
+                  <td>
+                    <input type="button" @click="g_appData.removeNodeFromCluster(node, cluster);updateGraphAuto()"
+                      style="background-image: url('/images/remove.png');" class="iconButton" />
+                  </td>
+                  <td>
+                    <select2 :options="titleToCharOptions[currentTitle]" v-model="node.name" class="charOptionSelect"
+                      @input="updateGraphAuto()">
+                    </select2>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </details>
+    <p>
+    <table>
+      <tr>
+        <th style="padding:0;text-align: left;"><input type="button" @click="g_appData.createNewEdge()"
+            style="background-image: url('/images/add.png');" class="iconButton" /></th>
+        <th>キャラ1</th>
+        <th></th>
+        <th>向き</th>
+        <th>キャラ2</th>
+        <th></th>
+        <th>関係</th>
+        <th></th>
+        <th>その他</th>
+      </tr>
+      <tr v-for="value in edges">
+        <td>
+          <input type="button" @click="g_appData.removeEdge(value);updateGraphAuto();"
+            style="background-image: url('/images/remove.png');" class="iconButton" />
+          <input type="button" @click="g_appData.duplicateEdge(value);updateGraphAuto();" style="vertical-align:top"
+            value="複製" />
+        </td>
+        <td>
+          <span v-if="value.usesSourceText">
+            <input type="text" v-model="value.sourceText" class="manualTextbox" @change="updateGraphAuto()" />
+          </span>
+          <span v-else>
+            <select2 :options="titleToCharOptions[currentTitle]" v-model="value.source" @input="updateGraphAuto()"
+              class="charOptionSelect"></select2>
+          </span>
+        </td>
+        <td>
+          <span v-if="value.usesSourceText">
+            <input type="button" class="editByTextButton" @click="value.usesSourceText = !value.usesSourceText;">
+          </span>
+          <span v-else>
+            <input type="button" class="editByTextButton darken" @click="value.usesSourceText = !value.usesSourceText;">
+          </span>
+        </td>
+        <td>
+          <select v-model=" value.dir" style="font-size: 25px;" @change="updateGraphAuto()">
+            <option v-for="option in dirOptions" v-bind:value="option.id">
+              {{ option.text }}
+            </option>
+          </select>
+        </td>
+        <td>
+          <span v-if="value.usesDestinationText">
+            <input type="text" v-model="value.destinationText" class="manualTextbox" @change="updateGraphAuto()" />
+          </span>
+          <span v-else>
+            <select2 :options="titleToCharOptions[currentTitle]" v-model="value.destination" class="charOptionSelect"
+              @input="updateGraphAuto()">
+            </select2>
+          </span>
+        </td>
+        <td>
+          <span v-if="value.usesDestinationText">
+            <input type="button" class="editByTextButton"
+              @click="value.usesDestinationText = !value.usesDestinationText;">
+          </span>
+          <span v-else>
+            <input type="button" class="editByTextButton darken"
+              @click="value.usesDestinationText = !value.usesDestinationText;">
+          </span>
+        </td>
+        <td>
+          <input type="text" v-model="value.label" @change="updateGraphAuto()">
+        </td>
+        <td>
+          <input type="button" @click="g_appData.swapEdgeDirection(value);updateGraphAuto();"
+            style="background-image: url('/images/swap.png');" class="iconButton" />
+        </td>
+        <td>
+          <label v-bind:for="'rank' + value.id">
+            <input v-bind:id="'rank' + value.id" type="checkbox" v-model="value.isRankSame"
+              @change="updateGraphAuto();">
+            同階層
+          </label>
+        </td>
+      </tr>
+    </table>
+    </p>
+    <p>
+      <select v-model="layout" style="font-size: 18px;" @change="updateGraphAuto()">
+        <option v-for="option in layoutOptions" v-bind:value="option.id">
+          {{ option.text }}
+        </option>
+      </select>
+      <select v-model="rankdir" style="font-size: 18px;" @change="updateGraphAuto()" v-if="layout=='dot'">
+        <option v-for="option in rankdirOptions" v-bind:value="option.id">
+          {{ option.text }}
+        </option>
+      </select>
+    </p>
+    <p>
+      <input id="download-btn" type="button" value="図を画像としてダウンロード" onclick="saveGraphAsPng()">
+      <input type="button" value="図を更新" @click="updateGraph();">
+      <input id="isAutoUpdateEnabled" v-model="isAutoUpdateEnabled" type="checkbox"><label
+        for="isAutoUpdateEnabled">図の自動更新</label>
+    </p>
+    <div id="graph" style="text-align: left;border: 0px solid rgb(220, 220, 220)"></div>
+    <p>{{message}}</p>
+
+    <p>
+    <details open style="padding: 5;" class="detailsDefault">
+      <summary>設定の共有</summary>
+      以下のURLで設定を再現する事ができます。<br />
+      <input type="button" value="コピー" @click="copyUrl()">
+      <input type="button" value="このURLをツイート" @click="location.href=g_appData.tweetUrl;">
+      <!-- <input type="button" value="インポート" @click="importUrl(g_appData.currentUrl)"> -->
+      <br />
+      <textarea id="urlTextArea" v-model="exportSettingUrl" style="width: 400px;height: 50px;" readonly></textarea>
+
+    </details>
+    </p>
+    <p>
+    <div v-show="isDebugModeEnabled">
+      <input type="button" value="URL強制インポート" @click="importUrl(g_appData.debugImportUrl, 1)">
+      <br />
+      <textarea v-model="debugImportUrl" style="width: 600px;height:100px;"></textarea>
+      <br />
+      ログ:<br />
+      <textarea v-model="log" style="width: 600px;height: 300px; "></textarea>
+    </div>
+    <div>
+      <!--キャラ画像確認用-->
+      <!-- <div v-for="info in characters" style="display:inline-block; text-align: center;"><img
+          v-bind:src="ThumbRoot + info.imageName"><br />{{info.name}}<br />({{info.imageName}})</div> -->
+    </div>
+    <div style="clear: both;float:right">
+      <input id="isDebugModeEnabled" type="checkbox" v-model="isDebugModeEnabled"><label
+        for="isDebugModeEnabled">デバッグモード(開発者用)</label></input>
+    </div>
+    </p>
+  </div>
+
+  <script>
+    function saveGraphAsPng() {
+      console.log("download button clicked");
+      let graphRoot = document.getElementById("graph");
+      let svgElem = graphRoot.firstChild;
+      svg2imageData(svgElem, function (data) {
+        console.log("creating download url");
+        let downloadEle = document.createElement("a");
+        downloadEle.href = data;
+        downloadEle.download = "FeRelationshipChart.png";
+        downloadEle.click();
+      }, function (error) {
+        console.log(error);
+        alert('failed to convert');
+      });
+    };
+  </script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+
+  <!-- select2 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/css/select2.min.css"
+    media="print" onload="this.media='all'">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/js/select2.min.js"></script>
+
+  <!-- vue.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.13/vue.min.js"></script>
+
+  <!-- 文字列圧縮 -->
+  <script async src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+
+
+  <script src="/node_modules/d3/dist/d3.js"></script>
+  <script src="/node_modules/@hpcc-js/wasm/dist/index.js" type="javascript/worker"></script>
+  <script src="/node_modules/d3-graphviz/build/d3-graphviz.js"></script>
+  <script src="/js/sql.js/dist/sql-wasm.js"></script>
+
+  <script src="/FehTools/FehRelationshipChartMaker/Graph.js?20230618_3"></script>
+  <script src="/FehTools/FehRelationshipChartMaker/Utilities.js?20231015"></script>
+  <script src="/FehTools/FehRelationshipChartMaker/SqliteDatabase.js?20230618_1"></script>
+  <script src="/FehTools/FehRelationshipChartMaker/Main.js?20230618_2"></script>
+  <script src="/FehTools/FehRelationshipChartMaker/Main_Heroes.js?20230618_2"></script>
+
+  <script>
+    window.addEventListener('load', (event) => {
+      initMain(null);
+      g_appData.showsCluster = true;
+    });
+  </script>
+</body>
+
+</html>

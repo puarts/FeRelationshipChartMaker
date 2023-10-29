@@ -19,6 +19,8 @@ class GraphNode {
         // d3.js で直接位置を指定するための座標
         this.x = 0;
         this.y = 0;
+
+        this.isSelected = false;
     }
 
     get isClustered() {
@@ -47,6 +49,11 @@ class GraphNode {
         this.name = elems[i++];
         this.x = Number(elems[i++]);
         this.y = Number(elems[i++]);
+    }
+
+    setPos(x, y) {
+        this.x = x;
+        this.y = y;
     }
 
     /**
@@ -373,6 +380,14 @@ class Graph {
                 this.clusters.push(cluster);
             }
         }
+    }
+    /**
+     * @param  {GraphNode} node
+     */
+    addNode(node) {
+        this.nodes.push(node);
+        this.idToNodes[node.id] = node;
+        this.nameToNodes[node.name] = node;
     }
 
     updateDictionaries() {

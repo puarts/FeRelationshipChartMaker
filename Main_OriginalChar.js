@@ -50,8 +50,16 @@ function initMain(characters) {
         },
         () => {
             g_appData.currentTitle = AllTitleLabel;
-            g_appData.edges.push(new GraphEdge(851, 880, "父"));
-            g_appData.edges.push(new GraphEdge(851, 844, "幼馴染", "both"));
-            updateGraph();
+            const node0 = new GraphNode(1, 851);
+            node0.setPos(200, 300);
+            const node1 = new GraphNode(2, 880);
+            node1.setPos(300, 100);
+            const node2 = new GraphNode(3, 844);
+            node2.setPos(100, 100);
+            g_appData.addNode(node0);
+            g_appData.addNode(node1);
+            g_appData.addNode(node2);
+            g_appData.graph.edges.push(new GraphEdge(node0.name, node1.name, "父"));
+            g_appData.graph.edges.push(new GraphEdge(node0.name, node2.name, "幼馴染", "both"));
         });
 }

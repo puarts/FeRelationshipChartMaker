@@ -108,14 +108,19 @@ class CharacterInfo {
         this.imageName = imageName;
         /** @type {string[]} */
         this.otherNames = otherNames;
+
+        this.addsOtherNameToDisplayName = false;
     }
 
     get displayName() {
-        let suffix = "";
-        if (this.otherNames != null && this.otherNames.length > 0) {
-            suffix += `\n(${this.otherNames[0]})`;
+        if (this.addsOtherNameToDisplayName) {
+            let suffix = "";
+            if (this.otherNames != null && this.otherNames.length > 0) {
+                suffix += `\n(${this.otherNames[0]})`;
+            }
+            return this.name + suffix;
         }
-        return this.name + suffix;
+        return this.name;
     }
 
     get imagePath() {
@@ -157,14 +162,18 @@ class AppData extends SqliteDatabase {
         /** @type {Object.<string, CharacterInfo} */
         this.characters = {};
 
-        /** @type {GraphEdge[]} */
-        // this.edges = [];
-
         /** @type {GraphCluster[]} */
         this.clusters = [];
 
-        /** @type {Graph} */
+        /** 編集用のグラフ @type {Graph} */
         this.graph = new Graph();
+        this.graph.layout = "";
+
+        /** 描画用のグラフ @type {Graph} */
+        this.displayGraph = new Graph();
+
+        this.canvasWidth = 400;
+        this.canvasHeight = 400;
 
         this.charOptions = [];
         this.titleOptions = [];
@@ -175,10 +184,10 @@ class AppData extends SqliteDatabase {
         this.titleToCharOptions[AllTitleLabel] = [];
 
         this.dirOptions = [
-            { id: "none", text: "－" },
-            { id: "forward", text: "→" },
-            { id: "back", text: "←" },
-            { id: "both", text: "⇔" },
+            { id: "none", text: "|" },
+            { id: "forward", text: "↓" },
+            { id: "back", text: "↑" },
+            { id: "both", text: "↓↑" },
         ];
 
         this.layoutOptions = [
@@ -202,9 +211,9 @@ class AppData extends SqliteDatabase {
             { id: "RL", text: "左向き" },
         ];
 
-        this.layout = "";
         // this.layout = "dot";
-        this.rankdir = "BT";
+        // this.layout = "dot";
+        // this.rankdir = "BT";
 
         this.filterCharacters = [new GraphNode(-1, NoneValue)];
         /** @type {FilterCategory[]} */
@@ -225,13 +234,16 @@ class AppData extends SqliteDatabase {
         this.showsCluster = false;
 
 
-        this.isDebugModeEnabled = false;
+        this.isDebugModeEnabled = true;
         this.message = "";
         this.errorMessage = "";
         this.log = "";
         this.exportSettingUrl = "";
         this.tweetUrl = "";
         this.debugImportUrl = "";
+
+        /** @type {GraphNode[]} */
+        this.selectedNodes = [];
     }
 
     createNewFilterCharacter() {
@@ -292,7 +304,7 @@ class AppData extends SqliteDatabase {
 
         //         const node = new GraphNode(++nodeId, "");
         //         node.fromString(nodeString);
-        //         this.graph.nodes.push(node);
+        //         this.addNode(node);
         //     }
         // }
 
@@ -312,8 +324,28 @@ class AppData extends SqliteDatabase {
 
     clear() {
         this.graph.clear();
-        // this.edges = [];
         this.clusters = [];
+    }
+
+    clearNodes() {
+        this.graph.nodes = [];
+        this.graph.edges = [];
+        this.graph.clusters = [];
+    }
+
+    addNode(node) {
+        this.graph.addNode(node);
+        this.updateNodeInfo(node);
+    }
+    /**
+     * @param  {GraphNode} node
+     */
+    updateNodeInfo(node) {
+        if (node.name in this.characters) {
+            const charInfo = this.characters[node.name];
+            node.displayName = charInfo.displayName;
+            node.imagePath = charInfo.imagePath;
+        }
     }
 
     /**
@@ -328,7 +360,7 @@ class AppData extends SqliteDatabase {
 
             let edge = new GraphEdge(NoneValue, NoneValue, "");
             edge.fromDotSource(edgeDotSource);
-            this.edges.push(edge);
+            this.graph.edges.push(edge);
         }
     }
     /**
@@ -366,7 +398,7 @@ class AppData extends SqliteDatabase {
                 edge.destination = charNameToCharDict[edge.destination];
             }
         }
-        this.edges = edges;
+        this.graph.edges = edges;
     }
 
     writeLogLine(message) {
@@ -480,13 +512,13 @@ class AppData extends SqliteDatabase {
 
     createNewEdge() {
         let edge = new GraphEdge(NoneValue, NoneValue, "");
-        this.edges.push(edge);
+        this.graph.edges.push(edge);
         return edge;
     }
 
     removeEdge(edge) {
-        let index = this.edges.indexOf(edge);
-        this.edges.splice(index, 1);
+        let index = this.graph.edges.indexOf(edge);
+        this.graph.edges.splice(index, 1);
     }
     /**
      * @param  {GraphEdge} edge
@@ -640,6 +672,29 @@ class AppData extends SqliteDatabase {
         return false;
     }
 
+    clearNodeSelection() {
+        this.selectNode = null;
+        for (const n of this.graph.nodes) {
+            n.isSelected = false;
+        }
+    }
+
+    selectNode(targetNode) {
+        for (const node of this.graph.nodes.filter(x => x != targetNode)) {
+            node.isSelected = false;
+        }
+        this.selectedNodes = [targetNode];
+        targetNode.isSelected = true;
+    }
+
+    toggleSelectNode(targetNode) {
+        for (const node of this.graph.nodes.filter(x => x != targetNode)) {
+            node.isSelected = false;
+        }
+        targetNode.isSelected = !targetNode.isSelected;
+        this.selectedNodes = targetNode.isSelected ? [targetNode] : [];
+    }
+
     writeError(message) {
         this.errorMessage = message;
     }
@@ -651,11 +706,17 @@ class AppData extends SqliteDatabase {
         const nodeNameToIdDict = {};
         let nodeId = 0;
         for (const edge of edges) {
-            nodeNameToIdDict[edge.source] = nodeId++;
-            nodeNameToIdDict[edge.destination] = nodeId++;
+            if (!(edge.source in nodeNameToIdDict)) {
+                nodeNameToIdDict[edge.source] = nodeId;
+                ++nodeId;
+            }
+            if (!(edge.destination in nodeNameToIdDict)) {
+                nodeNameToIdDict[edge.destination] = nodeId;
+                ++nodeId;
+            }
         }
 
-        let nodes = [];
+        const nodes = [];
         if (this.showsAllCharacters && this.selectedCategoryId == NoneValue && !this.filterCharacters.some(x => x.name != NoneValue)) {
             for (let char of Object.values(this.characters)) {
                 let imagePath = // "https://puarts.com" +
@@ -673,42 +734,59 @@ class AppData extends SqliteDatabase {
 
         }
         else {
-            let ids = {};
+            const idToCharInfoDict = {};
             if (this.showsCluster) {
                 for (let cluster of this.clusters) {
                     for (let node of cluster.belongingNodes) {
                         let charId = node.name;
                         if (charId != NoneValue) {
-                            ids[charId] = this.characters[charId];
+                            idToCharInfoDict[charId] = this.characters[charId];
                         }
                     }
                 }
             }
-            for (let edge of edges) {
+            for (const edge of edges) {
                 if (edge.isSourceValid && !edge.usesSourceText) {
                     let charId = edge.source;
                     if (charId in this.characters) {
-                        ids[charId] = this.characters[charId];
+                        idToCharInfoDict[charId] = this.characters[charId];
                     }
                 }
                 if (edge.isDestinationValid && !edge.usesDestinationText) {
                     let charId = edge.destination;
                     if (charId in this.characters) {
-                        ids[charId] = this.characters[charId];
+                        idToCharInfoDict[charId] = this.characters[charId];
                     }
                 }
             }
-            for (let char of Object.values(ids)) {
+            for (let char of Object.values(idToCharInfoDict)) {
                 let imagePath = // "https://puarts.com" +
                     char.imagePath;
                 if (this.isNodeImageDisabled) {
                     imagePath = "";
                 }
-                let node = new GraphNode(nodeNameToIdDict[char.id] ?? -1, char.id, char.displayName, imagePath, char.url);
+                const node = new GraphNode(nodeNameToIdDict[char.id] ?? -1, char.id, char.displayName, imagePath, char.url);
                 if (this.showsCluster) {
                     node.clusterName = this.getClusterName(node);
                 }
                 nodes.push(node);
+            }
+        }
+
+        {
+            const nodeNames = {}
+            for (const edge of edges) {
+                if (edge.isSourceValid && edge.usesSourceText) {
+                    nodeNames[edge.sourceText] = null;
+                }
+                if (edge.isDestinationValid && edge.usesDestinationText) {
+                    nodeNames[edge.destinationText] = null;
+                }
+            }
+            for (const name in nodeNames) {
+                const node = new GraphNode(nodeId, name, name);
+                nodes.push(node);
+                ++nodeId;
             }
         }
 
@@ -757,7 +835,7 @@ class AppData extends SqliteDatabase {
             }
         }
         let isFilterEnabled = Object.keys(filterCharDict).length > 0;
-        for (let edge of this.edges) {
+        for (let edge of this.graph.edges) {
             if (isFilterEnabled && !(edge.source in filterCharDict) && !(edge.destination in filterCharDict)) {
                 continue;
             }
@@ -774,65 +852,90 @@ class AppData extends SqliteDatabase {
         targetNode.y = sourceNode.y;
     }
     /**
-     * @param  {Graph} graph
      * @param  {GraphEdge[]} edges
      */
-    __updateGraphNodes(graph, edges) {
+    __createGraphNodes(edges) {
         const newNodes = this.__createNodes(edges);
 
-        const isNodeCountChanged = newNodes.length != graph.nodes.length;
+        const isNodeCountChanged = newNodes.length != this.graph.nodes.length;
+
+        const reusedNodeIds = {};
 
         // d3.js 用のノードプロパティ(位置座標など)を引き継ぐ
         for (const node of newNodes) {
             // キャラ名が一致してるノードで引き継ぎ
-            if (node.name in graph.nameToNodes) {
-                const oldNode = graph.nameToNodes[node.name];
+            if (node.name in this.graph.nameToNodes) {
+                const oldNode = this.graph.nameToNodes[node.name];
                 AppData.copyD3jsProps(oldNode, node);
                 console.log(`${node.name}(${oldNode.id}->${node.id}): keep params by name. ${node.x}, ${node.y}`);
+                reusedNodeIds[node.id] = null;
                 continue;
             }
 
             // ノード数に変化がなければ、ノードのキャラを変更しただけなので、
             // ノードIDで位置を引き継ぐ
-            if (!isNodeCountChanged && node.id in graph.idToNodes) {
-                const oldNode = graph.idToNodes[node.id];
+            if (!isNodeCountChanged && node.id in this.graph.idToNodes) {
+                const oldNode = this.graph.idToNodes[node.id];
                 AppData.copyD3jsProps(oldNode, node);
                 console.log(`${node.id}(${oldNode.name}->${node.name}): keep params by id. ${node.x}, ${node.y}`);
+                reusedNodeIds[node.id] = null;
                 continue;
             }
         }
-        graph.nodes = newNodes;
-    }
-    /**
-     * @param  {Graph} graph
-     */
-    __updateGraph(graph) {
-        graph.layout = this.layout;
-        graph.rankdir = this.rankdir;
 
-        const edges = this.__getFilteredEdges();
-        graph.edges = this.__createEdges(edges);
-        this.__updateGraphNodes(graph, edges);
+        const nameToNode = {};
+        const idToNode = {};
+        for (const node of newNodes) {
+            nameToNode[node.name] = node;
+            idToNode[node.id] = node;
+        }
+
+        for (const node of this.graph.nodes) {
+            if (node.name in nameToNode) continue;
+            if (node.id in idToNode) continue;
+
+            newNodes.push(node);
+        }
+
+        return newNodes;
+    }
+
+    __updateDisplayGraph() {
+        const displayGraph = this.displayGraph;
+        displayGraph.layout = this.graph.layout;
+        displayGraph.rankdir = this.graph.rankdir;
+
+        if (this.graph.layout == "") {
+            displayGraph.edges = this.__getFilteredEdges();
+            displayGraph.nodes = this.graph.nodes;
+        }
+        else {
+            const edges = this.__getFilteredEdges();
+            displayGraph.edges = this.__createEdges(edges);
+            displayGraph.nodes = this.__createGraphNodes(edges);
+            this.graph.nodes = displayGraph.nodes;
+            this.graph.updateDictionaries();
+        }
+
         {
             let labelPadding = "";
-            if (this.rankdir == "TB" || this.rankdir == "BT") {
+            if (displayGraph.rankdir == "TB" || displayGraph.rankdir == "BT") {
                 labelPadding = "   ";
             }
-            for (const edge of graph.edges) {
+            for (const edge of displayGraph.edges) {
                 edge.labelPadding = labelPadding;
             }
         }
 
         if (this.showsCluster) {
-            graph.clusters = Array.from(this.clusters.filter(x => x.belongingNodes.length > 0));
+            displayGraph.clusters = Array.from(this.clusters.filter(x => x.belongingNodes.length > 0));
         }
 
-        graph.updateDictionaries();
-        return graph;
+        return displayGraph;
     }
 
     updateGraph(graphElementId) {
-        let graph = this.__updateGraph(this.graph);
+        const graph = this.__updateDisplayGraph();
         this.__updateGraphImpl(graphElementId, graph);
     }
 
@@ -842,8 +945,15 @@ class AppData extends SqliteDatabase {
      */
     __updateGraphImpl(graphElementId, graph, imageSize = 100) {
         this.updateMessage("グラフ更新中..");
+
+        const area = document.getElementById(`${graphElementId}`);
+        for (const node of area.childNodes) {
+            if (node.nodeName != "svg") continue;
+            area.removeChild(node);
+        }
+
         if (graph.layout == "") {
-            AppData.__updateGraphByD3js(this, graphElementId, graph, imageSize);
+            AppData.__updateGraphByD3js(this, graphElementId, graph, imageSize, this.canvasWidth, this.canvasHeight);
         }
         else {
             AppData.__updateGraphByGraphviz(this, graphElementId, graph, imageSize);
@@ -855,12 +965,40 @@ class AppData extends SqliteDatabase {
         }
     }
     /**
+     * @param  {Graph} graph
+     */
+    static estimateNodeId(graph) {
+        let id = 0;
+        do {
+            if (graph.nodes.some(x => x.id == id)) {
+                ++id;
+                continue;
+            }
+        } while (false);
+        return id;
+    }
+
+    /**
+     * @param  {Graph} graph
+     */
+    static estimateNodeName(graph) {
+        let name = 0;
+        do {
+            if (graph.nodes.some(x => x.name == name)) {
+                --name;
+                continue;
+            }
+        } while (false);
+        return name;
+    }
+
+    /**
      * @param  {AppData} self
      * @param  {string} graphElementId
      * @param  {Graph} graph
      * @param  {Number} imageSize
      */
-    static __updateGraphByD3js(self, graphElementId, graph, imageSize) {
+    static __updateGraphByD3js(self, graphElementId, graph, imageSize, canvasWidth, canvasHeight) {
         const imageFrameInnerWidth = 5;
         const imageFrameOuterWidth = 2;
         const imageFrameColor = "#ffdd99";
@@ -870,8 +1008,26 @@ class AppData extends SqliteDatabase {
         const labelOffsetY = fontSize * 0.3;
 
         const svg = d3.create("svg")
-            .attr("width", 800)
-            .attr("height", 600);
+            .attr("width", canvasWidth)
+            .attr("height", canvasHeight);
+
+        svg.call(d3.drag()
+            .on("start", (e, d) => {
+            })
+            .on("drag", (e, d) => {
+            })
+            .on("end", (e, d) => {
+                // クリック時にノード追加
+                console.log(`click (${e.x}, ${e.y})`);
+                const nodeId = AppData.estimateNodeId(self.graph);
+                const node = new GraphNode(nodeId, nodeId);
+                node.setPos(e.x, e.y);
+                self.addNode(node);
+                const edge = new GraphEdge(node.name, NoneValue, "");
+                self.graph.edges.push(edge);
+                self.selectNode(node);
+                self.updateGraph(graphElementId);
+            }));
 
         // ノードの位置が原点にある場合だけ自動的にレイアウトを決めます。
         {
@@ -915,8 +1071,9 @@ class AppData extends SqliteDatabase {
             .enter()
             .append("circle")
             .attr("r", radius)
-            .attr("fill", "black")
-            .attr("stroke", "black");
+            .attr("fill", "#9df")
+            .attr("opacity", 0.8)
+            .attr("stroke-width", "0");
 
         const imageFrame = svg.append("g").attr("id", "imageFrames")
             .selectAll("circle")
@@ -937,21 +1094,41 @@ class AppData extends SqliteDatabase {
             .attr("href", d => d.imagePath)
             .attr("height", imageSize)
             .attr("width", imageSize)
+            .attr("class", "selectableIcon")
             .attr("clip-path", d => `url(#circle-clip${d.name})`)
             .call(d3.drag()
                 .on("start", (e, d) => {
                     if (!e.active) simulation.alphaTarget(0.3).restart();
                     d.fx = e.x;
                     d.fy = e.y;
+                    d.dragStartPosX = e.x;
+                    d.dragStartPosY = e.y;
+                    d.isDragMoved = false;
+                    d.dragStartSelected = d.isSelected;
+                    self.selectNode(d);
+                    console.log(`start(${d.dragStartPosX}, ${d.dragStartPosY})`);
                 })
                 .on("drag", (e, d) => {
                     d.fx = e.x;
                     d.fy = e.y;
+                    if (!d.isDragMoved) {
+                        const distSqure = (d.dragStartPosX - e.x) * (d.dragStartPosX - e.x) + (d.dragStartPosY - e.y) * (d.dragStartPosY - e.y);
+                        const distThreshold = 2;
+                        console.log(`distSqure = ${distSqure}`);
+                        if (distSqure > (distThreshold * distThreshold)) {
+                            d.isDragMoved = true;
+                        }
+                    }
                 })
                 .on("end", (e, d) => {
                     if (!e.active) simulation.alphaTarget(0);
                     d.fx = null;
                     d.fy = null;
+                    console.log(`isDragMoved = ${d.isDragMoved}`);
+                    if (!d.isDragMoved) {
+                        d.isSelected = d.dragStartSelected;
+                        self.toggleSelectNode(d);
+                    }
                 }));
         const clipPaths = svg
             .append("defs")
@@ -1009,8 +1186,8 @@ class AppData extends SqliteDatabase {
         const nodeDict = {};
         graph.nodes.forEach(x => nodeDict[x.name] = x);
         for (let edge of graph.edges) {
-            edge.sourceNode = nodeDict[edge.source];
-            edge.destinationNode = nodeDict[edge.destination];
+            edge.sourceNode = nodeDict[edge.actualSource];
+            edge.destinationNode = nodeDict[edge.actualDestination];
         }
         simulation = d3.forceSimulation(graph.nodes)
             .on("tick", () => {
@@ -1029,19 +1206,22 @@ class AppData extends SqliteDatabase {
 
                 node
                     .attr("cx", d => d.x)
-                    .attr("cy", d => d.y);
+                    .attr("cy", d => d.y)
+                    .attr("r", d => d.isSelected ? radius + 8 : radius);
 
                 images
                     .attr("x", d => d.x - radius)
-                    .attr("y", d => d.y - radius);
+                    .attr("y", d => d.y - radius)
+                    ;
 
                 imageFrame
                     .attr("cx", d => d.x)
-                    .attr("cy", d => d.y);
+                    .attr("cy", d => d.y)
+                    ;
 
                 nodeLabels
                     .attr("x", d => d.x)
-                    .attr("y", d => d.y + radius - 5);
+                    .attr("y", d => d.hasImage ? d.y + radius - 5 : d.y + 5);
 
                 clipPaths
                     .attr("cx", d => d.x)
@@ -1050,9 +1230,6 @@ class AppData extends SqliteDatabase {
 
         const chart = svg.node();
         const area = document.getElementById(`${graphElementId}`);
-        if (area.firstChild != null) {
-            area.removeChild(area.firstChild);
-        }
         area.appendChild(chart);
         self.updateMessage("");
     }

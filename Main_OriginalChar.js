@@ -61,5 +61,6 @@ function initMain(characters) {
             g_appData.addNode(node2);
             g_appData.graph.edges.push(new GraphEdge(node0.name, node1.name, "父"));
             g_appData.graph.edges.push(new GraphEdge(node0.name, node2.name, "幼馴染", "both"));
+            updateGraph();
         });
 }

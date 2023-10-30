@@ -417,17 +417,23 @@ class AppData extends SqliteDatabase {
         this.log = "";
     }
 
-    init(characters, dbPath, createCharacterInfosFromDbFunc) {
+    init(characters, dbPath, createCharacterInfosFromDbFunc, postInitFunc = null) {
         if (characters == null) {
             this.dbPath = dbPath;
             g_appData.initDatabase(() => {
                 this.db = this.dbs[0];
                 const createdCharacters = createCharacterInfosFromDbFunc(this.db);
                 this.updateCharacterInfos(createdCharacters);
+                if (postInitFunc != null) {
+                    postInitFunc();
+                }
             });
         }
         else {
             this.updateCharacterInfos(characters);
+            if (postInitFunc != null) {
+                postInitFunc();
+            }
         }
     }
 
@@ -1339,15 +1345,15 @@ function initMainImpl(
     characters,
     dbPath, createCharInfoFunc, initGraphFunc
 ) {
-    g_appData.init(characters, dbPath, createCharInfoFunc);
-
-    if (!location.search.includes("s=")) {
-        // サンプルのグラフを設定
-        initGraphFunc();
-    }
-    else {
-        importUrl(location.search);
-    }
+    g_appData.init(characters, dbPath, createCharInfoFunc, () => {
+        if (!location.search.includes("s=")) {
+            // サンプルのグラフを設定
+            initGraphFunc();
+        }
+        else {
+            importUrl(location.search);
+        }
+    });
 }
 
 

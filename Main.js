@@ -631,6 +631,13 @@ class AppData extends SqliteDatabase {
         this.__removeClusterFromOptions(cluster);
     }
 
+    removeSelectedNodes() {
+        for (const node of this.selectedNodes) {
+            this.graph.nodes.splice(this.graph.nodes.indexOf(node), 1);
+        }
+        this.selectedNodes = [];
+    }
+
     /**
      * @param  {GraphCluster} cluster
      */
@@ -685,7 +692,7 @@ class AppData extends SqliteDatabase {
         }
     }
 
-    selectNode(targetNode) {
+    selectSingleNode(targetNode) {
         for (const node of this.graph.nodes.filter(x => x != targetNode)) {
             node.isSelected = false;
         }
@@ -975,12 +982,7 @@ class AppData extends SqliteDatabase {
      */
     static estimateNodeId(graph) {
         let id = 0;
-        do {
-            if (graph.nodes.some(x => x.id == id)) {
-                ++id;
-                continue;
-            }
-        } while (false);
+        while (graph.nodes.some(x => x.id == id)) ++id;
         return id;
     }
 
@@ -1026,12 +1028,10 @@ class AppData extends SqliteDatabase {
                 // クリック時にノード追加
                 console.log(`click (${e.x}, ${e.y})`);
                 const nodeId = AppData.estimateNodeId(self.graph);
-                const node = new GraphNode(nodeId, nodeId);
+                const node = new GraphNode(nodeId, 1);
                 node.setPos(e.x, e.y);
                 self.addNode(node);
-                const edge = new GraphEdge(node.name, NoneValue, "");
-                self.graph.edges.push(edge);
-                self.selectNode(node);
+                self.selectSingleNode(node);
                 self.updateGraph(graphElementId);
             }));
 
@@ -1071,6 +1071,39 @@ class AppData extends SqliteDatabase {
             .style("text-shadow", `${edgeLabelShadowColor} ${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px 0px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px 0px 0px`)
             .text(x => x.label);
 
+        let simulation;
+        const dragModeCalls = d3.drag()
+            .on("start", (e, d) => {
+                if (!e.active) simulation.alphaTarget(0.3).restart();
+                d.fx = e.x;
+                d.fy = e.y;
+                d.dragStartPosX = e.x;
+                d.dragStartPosY = e.y;
+                d.isDragMoved = false;
+            })
+            .on("drag", (e, d) => {
+                d.fx = e.x;
+                d.fy = e.y;
+                if (!d.isDragMoved) {
+                    const distSqure = (d.dragStartPosX - e.x) * (d.dragStartPosX - e.x) + (d.dragStartPosY - e.y) * (d.dragStartPosY - e.y);
+                    const distThreshold = 2;
+                    if (distSqure > (distThreshold * distThreshold)) {
+                        d.isDragMoved = true;
+                    }
+                }
+            })
+            .on("end", (e, d) => {
+                if (!e.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+                if (!d.isSelected) {
+                    self.selectSingleNode(d);
+                }
+                else if (!d.isDragMoved) {
+                    self.toggleSelectNode(d);
+                }
+            });
+
         const node = svg.append("g").attr("id", "edgePoints")
             .selectAll("circle")
             .data(graph.nodes)
@@ -1078,8 +1111,8 @@ class AppData extends SqliteDatabase {
             .append("circle")
             .attr("r", radius)
             .attr("fill", "#9df")
-            .attr("opacity", 0.8)
-            .attr("stroke-width", "0");
+            .attr("stroke-width", "0")
+            .call(dragModeCalls);
 
         const imageFrame = svg.append("g").attr("id", "imageFrames")
             .selectAll("circle")
@@ -1089,9 +1122,13 @@ class AppData extends SqliteDatabase {
             .attr("r", radius)
             .attr("fill", imageFrameColor)
             .attr("stroke-width", imageFrameOuterWidth)
-            .attr("stroke", imageFrameOuterColor);
+            .attr("class", "selectableIcon")
+            .attr("stroke", imageFrameOuterColor)
+            .call(dragModeCalls);
 
-        let simulation;
+
+
+
         const images = svg.append("g").attr("id", "images")
             .selectAll("image")
             .data(graph.nodes)
@@ -1101,48 +1138,15 @@ class AppData extends SqliteDatabase {
             .attr("height", imageSize)
             .attr("width", imageSize)
             .attr("class", "selectableIcon")
-            .attr("clip-path", d => `url(#circle-clip${d.name})`)
-            .call(d3.drag()
-                .on("start", (e, d) => {
-                    if (!e.active) simulation.alphaTarget(0.3).restart();
-                    d.fx = e.x;
-                    d.fy = e.y;
-                    d.dragStartPosX = e.x;
-                    d.dragStartPosY = e.y;
-                    d.isDragMoved = false;
-                    d.dragStartSelected = d.isSelected;
-                    self.selectNode(d);
-                    console.log(`start(${d.dragStartPosX}, ${d.dragStartPosY})`);
-                })
-                .on("drag", (e, d) => {
-                    d.fx = e.x;
-                    d.fy = e.y;
-                    if (!d.isDragMoved) {
-                        const distSqure = (d.dragStartPosX - e.x) * (d.dragStartPosX - e.x) + (d.dragStartPosY - e.y) * (d.dragStartPosY - e.y);
-                        const distThreshold = 2;
-                        console.log(`distSqure = ${distSqure}`);
-                        if (distSqure > (distThreshold * distThreshold)) {
-                            d.isDragMoved = true;
-                        }
-                    }
-                })
-                .on("end", (e, d) => {
-                    if (!e.active) simulation.alphaTarget(0);
-                    d.fx = null;
-                    d.fy = null;
-                    console.log(`isDragMoved = ${d.isDragMoved}`);
-                    if (!d.isDragMoved) {
-                        d.isSelected = d.dragStartSelected;
-                        self.toggleSelectNode(d);
-                    }
-                }));
+            .attr("clip-path", d => `url(#circle-clip${d.id})`)
+            .call(dragModeCalls);
         const clipPaths = svg
             .append("defs")
             .selectAll("clipPath")
             .data(graph.nodes)
             .enter()
             .append("clipPath")
-            .attr("id", d => "circle-clip" + d.name)
+            .attr("id", d => "circle-clip" + d.id)
             .append("circle")
             .attr("r", imageSize / 2 - (imageFrameInnerWidth + imageFrameOuterWidth));
 
@@ -1218,6 +1222,7 @@ class AppData extends SqliteDatabase {
                 images
                     .attr("x", d => d.x - radius)
                     .attr("y", d => d.y - radius)
+                    .attr("clip-path", d => d.hasImage ? `url(#circle-clip${d.id})` : "")
                     ;
 
                 imageFrame
@@ -1407,7 +1412,7 @@ function svg2imageData(svgElement, successCallback, errorCallback) {
     });
 }
 
-let BaseUrl = "https://puarts.com/?pid=1779";
+const BaseUrl = "https://puarts.com/?pid=1779";
 
 function updateUrl() {
     g_appData.writeLogLine(`■URLの更新`);
@@ -1452,3 +1457,10 @@ function importUrl(url, edgeInitDelay = 0) {
     // 初回だけそうではないので、明示的にグラフを更新する
     updateGraphWithoutClearLog();
 }
+
+document.addEventListener("keydown", function (event) {
+    if (event.key === "Delete") {
+        g_appData.removeSelectedNodes();
+        updateGraph();
+    }
+});

@@ -80,6 +80,7 @@
       display: inline-block;
       border: 2px solid #797;
       border-radius: 10px;
+      word-wrap: break-word;
     }
 
     .edgeEditBoxContainer {
@@ -138,9 +139,11 @@
           <select2 :options="titleToCharOptions[currentTitle]" v-model="node.name"
             @input="g_appData.updateNodeInfo(node);updateGraphAuto();" class="charOptionSelect"></select2>
         </span>
-        <span v-if="isDebugModeEnabled">
-          id={{node.id}}, name={{node.name}}
-        </span>
+
+        <div v-if="isDebugModeEnabled">
+          id={{node.id}}, name={{node.name}}<br />
+          displayName={{node.displayName}}, imagePath={{node.imagePath}}
+        </div>
       </div>
     </fieldset>
     <fieldset class="edgeEditBoxContainer">
@@ -319,6 +322,9 @@
             <div>
               pos=({{node.x}}, {{node.y}})
             </div>
+            <div>
+              imagePath={{node.imagePath}}
+            </div>
           </div>
         </div>
       </fieldset>
@@ -334,6 +340,9 @@
             </div>
             <div>
               pos=({{node.x}}, {{node.y}})
+            </div>
+            <div>
+              imagePath={{node.imagePath}}
             </div>
           </div>
         </div>

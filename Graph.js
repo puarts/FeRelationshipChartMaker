@@ -21,6 +21,10 @@ class GraphNode {
         this.y = 0;
 
         this.isSelected = false;
+        this.mouseOver = false;
+
+        // select2用
+        this.text = displayName;
     }
 
     get isClustered() {
@@ -88,6 +92,8 @@ class GraphEdge {
         /** @type {GraphNode} */
         this.destinationNode = null;
         this.label = label;
+        this.labelOffsetX = 0;
+        this.labelOffsetY = 0;
         this.rank = rank;
         this.isRankSame = false;
         this.dir = dir;
@@ -102,6 +108,9 @@ class GraphEdge {
         this.destinationText = "";
         this.usesSourceText = false;
         this.usesDestinationText = false;
+
+        this.isSelected = false;
+        this.mouseOver = false;
     }
 
     toString() {

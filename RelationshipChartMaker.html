@@ -70,6 +70,7 @@
       opacity: .5;
     }
 
+
     .edgeEditBox {
       position: relative;
       width: 246px;
@@ -96,19 +97,29 @@
     }
   </style>
   <div id="app" style="text-align: left;">
-    <select v-model="graph.layout" style="font-size: 18px;" @change="updateGraphAuto()">
-      <option v-for="option in layoutOptions" v-bind:value="option.id">
-        {{ option.text }}
-      </option>
-    </select>
-    <select v-model="graph.rankdir" style="font-size: 18px;" @change="updateGraphAuto()" v-if="graph.layout=='dot'">
-      <option v-for="option in rankdirOptions" v-bind:value="option.id">
-        {{ option.text }}
-      </option>
-    </select>
-    <div style="display: block;position:relative">
-      <div>
+    <div>
+      作品: <select v-model="currentTitle" style="font-size: 18px;">
+        <option v-for="option in titleOptions" v-bind:value="option.id">
+          {{ option.text }}
+        </option>
+      </select>
 
+    </div>
+    <div>
+      配置: <select v-model="graph.layout" style="font-size: 18px;" @change="updateGraphAuto()">
+        <option v-for="option in layoutOptions" v-bind:value="option.id">
+          {{ option.text }}
+        </option>
+      </select>
+      <select v-model="graph.rankdir" style="font-size: 18px;" @change="updateGraphAuto()" v-if="graph.layout=='dot'">
+        <option v-for="option in rankdirOptions" v-bind:value="option.id">
+          {{ option.text }}
+        </option>
+      </select>
+
+    </div>
+    <div style="display: block;position:relative">
+      <div v-if="isDebugModeEnabled">
         <span v-show="isDebugModeEnabled">
           <input type="button" value="図を強制更新" @click="updateGraph();">
           <input id="isAutoUpdateEnabled" v-model="isAutoUpdateEnabled" type="checkbox"><label
@@ -117,23 +128,35 @@
       </div>
 
       <div id="graph" style="text-align: left;border: 1px solid rgb(220, 220, 220);width:fit-content;position:relative">
-        <div style="float:right">
+        <div style="position:absolute;right:0;top:0;">
           <div style="display:inline-block">
-            <input id="download-btn" type="button" class="topMenuIconButton selectableIcon" value="クリア"
+            <input type="button" class="topMenuIconButton selectableIcon" value="クリア"
               onclick="g_appData.clearNodes();updateGraphAuto();" style="width: 50px;">
           </div>
 
-          <div style="display:inline-block">
-            <input id="download-btn" type="button" class="topMenuIconButton selectableIcon"
-              style="background-image: url('/images/download.png');" onclick="saveGraphAsPng()">
-          </div>
+          <input type="button" class="topMenuIconButton selectableIcon"
+            style="background-image: url('/images/download.png');" onclick="saveGraphAsPng()">
         </div>
-        <div style="clear: both;"></div>
+        <!--選択エッジの編集UI-->
+        <textarea id="editSelectedEdgeLabel" v-model="(selectedEdge || {}).label"
+          @change="g_appData.clearSelection();updateGraphAuto();" style="position: absolute;top: 0;left: 0;"
+          v-show="selectedEdge!=null"></textarea>
+
+        <!-- <textarea id="editSelectedNodeLabel" v-model="(selectedNode || {}).name"
+          @change="g_appData.clearSelection();updateGraphAuto();" style="position: absolute;top: 0;left: 0;"
+          v-show="selectedNode!=null"></textarea> -->
+        <div id="editSelectedNodeLabel" v-show="isNodeLabelEditing" style="position: absolute;top: 0;left: 0;">
+          <select2 :options="titleToCharOptions[currentTitle]" v-model="(selectedNode || {}).name"
+            @input="selectedNodeNameChanged()" @close="g_appData.clearSelection()" class="charOptionSelect"></select2>
+
+        </div>
+
+
       </div>
       <p>{{message}}</p>
     </div>
     <fieldset class="edgeEditBoxContainer">
-      <legend>選択ノード</legend>
+      <legend>選択アイテム</legend>
       <div v-for="node in selectedNodes">
         <span>
           <select2 :options="titleToCharOptions[currentTitle]" v-model="node.name"
@@ -141,30 +164,15 @@
         </span>
 
         <div v-if="isDebugModeEnabled">
-          id={{node.id}}, name={{node.name}}<br />
-          displayName={{node.displayName}}, imagePath={{node.imagePath}}
+          id={{node.id}}, name={{node.name}},<br />
+          displayName={{node.displayName}},<br />
+          imagePath={{node.imagePath}},<br />
+          isSelected={{node.isSelected}}<br />
+          mouseOver={{node.mouseOver}}<br />
         </div>
       </div>
-    </fieldset>
-    <fieldset class="edgeEditBoxContainer">
-      <legend>関係の設定</legend>
-      作品: <select v-model="currentTitle" style="font-size: 18px;">
-        <option v-for="option in titleOptions" v-bind:value="option.id">
-          {{ option.text }}
-        </option>
-      </select>
-      <div style="float:right;margin-right: 5px;">
-        <input type="button" @click="g_appData.createNewEdge()"
-          style="background-image: url('/images/add.png');background-color: rgb(204, 228, 204);width:20px;height:20px"
-          class="iconButton" />
-      </div>
-      <div style="clear: both;"></div>
-
-      <div v-for="value in graph.edges" class="edgeEditBox">
+      <div v-for="value in selectedEdges" class="edgeEditBox">
         <div style="position:absolute;top:2px;right:2px;">
-          <input type="button" class="iconButton" @click="g_appData.duplicateEdge(value);updateGraphAuto();"
-            style="height: 20px;padding: 0;margin:0 6px 0 0;vertical-align: top;" value="複製" />
-
           <input type="button" @click="g_appData.removeEdge(value);updateGraphAuto();"
             style="width:20px;height:20px;background-image: url('/images/remove.png');background-color: #9ccabf;"
             class="iconButton" />
@@ -176,7 +184,7 @@
               <input type="text" v-model="value.sourceText" class="manualTextbox" @change="updateGraphAuto()" />
             </span>
             <span v-else>
-              <select2 :options="titleToCharOptions[currentTitle]" v-model="value.source" @input="updateGraphAuto()"
+              <select2 :options="graph.nodes" v-model="value.source" @input="updateGraphAuto()"
                 class="charOptionSelect"></select2>
             </span>
           </div>
@@ -209,7 +217,7 @@
               <input type="text" v-model="value.destinationText" class="manualTextbox" @change="updateGraphAuto()" />
             </span>
             <span v-else>
-              <select2 :options="titleToCharOptions[currentTitle]" v-model="value.destination" class="charOptionSelect"
+              <select2 :options="graph.nodes" v-model="value.destination" class="charOptionSelect"
                 @input="updateGraphAuto()">
               </select2>
             </span>
@@ -244,6 +252,7 @@
         </div>
       </div>
     </fieldset>
+
 
     <details>
       <summary>グループの設定</summary>
@@ -328,6 +337,8 @@
           </div>
         </div>
       </fieldset>
+
+
       <fieldset class="edgeEditBoxContainer" style="display: inline-block;">
         <legend>displayGraph.nodes</legend>
         <div v-for="node in displayGraph.nodes">
@@ -343,6 +354,101 @@
             </div>
             <div>
               imagePath={{node.imagePath}}
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="edgeEditBoxContainer">
+        <legend>関係の設定</legend>
+        <div style="float:right;margin-right: 5px;">
+          <input type="button" @click="g_appData.createNewEdge()"
+            style="background-image: url('/images/add.png');background-color: rgb(204, 228, 204);width:20px;height:20px"
+            class="iconButton" />
+        </div>
+        <div style="clear: both;"></div>
+
+        <div v-for="value in graph.edges" class="edgeEditBox">
+          <div style="position:absolute;top:2px;right:2px;">
+            <input type="button" class="iconButton" @click="g_appData.duplicateEdge(value);updateGraphAuto();"
+              style="height: 20px;padding: 0;margin:0 6px 0 0;vertical-align: top;" value="複製" />
+
+            <input type="button" @click="g_appData.removeEdge(value);updateGraphAuto();"
+              style="width:20px;height:20px;background-image: url('/images/remove.png');background-color: #9ccabf;"
+              class="iconButton" />
+          </div>
+
+          <div style="margin-top: 20px;">
+            <div style="display: inline-block; vertical-align: middle;">
+              <span v-if="value.usesSourceText">
+                <input type="text" v-model="value.sourceText" class="manualTextbox" @change="updateGraphAuto()" />
+              </span>
+              <span v-else>
+                <select2 :options="graph.nodes" v-model="value.source" @input="updateGraphAuto()"
+                  class="charOptionSelect">
+                </select2>
+              </span>
+            </div>
+            <div style="display: inline-block; vertical-align: middle;">
+              <span v-if="value.usesSourceText">
+                <input type="button" class="editByTextButton" @click="value.usesSourceText = !value.usesSourceText;">
+              </span>
+              <span v-else>
+                <input type="button" class="editByTextButton darken"
+                  @click="value.usesSourceText = !value.usesSourceText;">
+              </span>
+            </div>
+          </div>
+          <div style="padding: 3px;">
+            <select v-model="value.dir" style="font-size: 18px;" @change="updateGraphAuto()">
+              <option v-for="option in dirOptions" v-bind:value="option.id">
+                {{ option.text }}
+              </option>
+            </select>
+
+            <input type="text" v-model="value.label" @change="updateGraphAuto()"
+              style="vertical-align:text-bottom;width:170px;">
+            <input type="button" @click="g_appData.swapEdgeDirection(value);updateGraphAuto();"
+              style="background-image: url('/images/swap.png');width:20px;height:20px" class="iconButton" />
+          </div>
+          <div>
+            <div style="display: inline-block; vertical-align: middle;">
+
+              <span v-if="value.usesDestinationText">
+                <input type="text" v-model="value.destinationText" class="manualTextbox" @change="updateGraphAuto()" />
+              </span>
+              <span v-else>
+                <select2 :options="graph.nodes" v-model="value.destination" class="charOptionSelect"
+                  @input="updateGraphAuto()">
+                </select2>
+              </span>
+            </div>
+            <div style="display: inline-block; vertical-align: middle;">
+
+              <span v-if="value.usesDestinationText">
+                <input type="button" class="editByTextButton"
+                  @click="value.usesDestinationText = !value.usesDestinationText;">
+              </span>
+              <span v-else>
+                <input type="button" class="editByTextButton darken"
+                  @click="value.usesDestinationText = !value.usesDestinationText;">
+              </span>
+            </div>
+          </div>
+          <div style="margin-top: 2px;" v-if="graph.layout == 'dot'">
+            <label v-bind:for="'rank' + value.id">
+              <input v-bind:id="'rank' + value.id" type="checkbox" v-model="value.isRankSame"
+                @change="updateGraphAuto();">
+              同階層
+            </label>
+          </div>
+          <div style="display: inline-block;background-color: aliceblue;margin: 3px;padding:3px;border: solid 1px #999;"
+            v-if="isDebugModeEnabled">
+            <div>
+              source={{value.source}}, destination={{value.destination}}
+            </div>
+            <div>
+              destinationText="{{value.destinationText}}"
             </div>
           </div>
         </div>
@@ -365,6 +471,12 @@
     </div>
     </p>
   </div>
+
+  <script type="text/x-template" id="edge-detail-template">
+    <textarea v-model="(value || {}).label"  @change="g_appData.clearSelection();updateGraphAuto();"></textarea>
+      <!-- <input type="text" v-model="(value || {}).label" @change="updateGraphAuto()"
+           @change="g_appData.clearSelection()"> -->
+  </script>
 
   <script>
     function findSvgElem() {
@@ -422,11 +534,30 @@
   <script src="/FehTools/FehRelationshipChartMaker/Graph.js?20230619"></script>
   <script src="/FehTools/FehRelationshipChartMaker/Utilities.js?20231015"></script>
   <script src="/FehTools/FehRelationshipChartMaker/SqliteDatabase.js?20230618_1"></script>
+  <script src="/FehTools/FehRelationshipChartMaker/Main_DrawByD3.js?20230618_1"></script>
   <script src="/FehTools/FehRelationshipChartMaker/Main.js?20230618_1"></script>
   <script src="/FehTools/FehRelationshipChartMaker/Main_OriginalChar.js?20230618_1"></script>
 
   <script>
+    function selectedNodeNameChanged(elem) {
+      if (g_appData.selectedNode != null) {
+        g_appData.updateNodeInfo(g_appData.selectedNode);
+        updateGraphAuto();
+      }
+    }
     window.addEventListener('load', (event) => {
+      $("#editSelectedEdgeLabel").keypress(function (e) {
+        if (e.which === 13 && !e.shiftKey) {
+          // Enter 時の挙動
+          e.preventDefault();
+          g_appData.clearSelection();
+        }
+        else if (e.which === 10) {
+          // Ctrl+Enter
+          g_appData.selectedEdge.label += '\r\n';
+        }
+      });
+
       initMain(null);
       g_appData.showsCluster = true;
     });

@@ -2,14 +2,6 @@
 const GraphElemId = "graph";
 const g_dummyImagePath = "/blog/images/FehCylPortraits/Unknown.png";
 
-class PreviewLink {
-    constructor() {
-        this.sourceX = 0;
-        this.sourceY = 0;
-        this.targetX = 0;
-        this.targetY = 0;
-    }
-}
 
 function toDataURLAsync(url, callback) {
     var xhr = new XMLHttpRequest();
@@ -182,6 +174,8 @@ class AppData extends SqliteDatabase {
 
         this.canvasWidth = 400;
         this.canvasHeight = 400;
+        this.graphScale = 1.0;
+        this.svgManager = new SvgManager();
 
         this.charOptions = [];
         this.titleOptions = [];
@@ -244,7 +238,7 @@ class AppData extends SqliteDatabase {
         this.showsCluster = false;
 
 
-        this.isDebugModeEnabled = true;
+        this.isDebugModeEnabled = false;
         this.message = "";
         this.errorMessage = "";
         this.log = "";
@@ -1016,16 +1010,17 @@ class AppData extends SqliteDatabase {
     __updateGraphImpl(graphElementId, graph, imageSize = 100) {
         this.updateMessage("グラフ更新中..");
 
-        const area = document.getElementById(`${graphElementId}`);
-        for (const node of area.childNodes) {
-            if (node.nodeName != "svg") continue;
-            area.removeChild(node);
-        }
-
         if (graph.layout == "") {
-            updateGraphByD3js(this, graphElementId, graph, imageSize, this.canvasWidth, this.canvasHeight);
+            updateGraphByD3js(this, graphElementId, graph, this.canvasWidth, this.canvasHeight);
+            this.updateMessage("");
         }
         else {
+            const area = document.getElementById(`${graphElementId}`);
+            for (const node of area.childNodes) {
+                if (node.nodeName != "svg") continue;
+                area.removeChild(node);
+            }
+
             AppData.__updateGraphByGraphviz(this, graphElementId, graph, imageSize);
         }
 

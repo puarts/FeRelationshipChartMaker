@@ -1,7 +1,9 @@
+<!DOCTYPE html>
 <html>
 
 <head>
   <meta charset="utf8" />
+  <title>FE相関図メーカー</title>
   <link rel="stylesheet" href="/css/main.css?20181201" type="text/css" />
 </head>
 
@@ -15,6 +17,14 @@
   </details>
   <div style="clear: both;"></div>
   <style>
+    .svg__container {
+      position: relative;
+      width: 100%;
+      border: 1px solid rgb(220, 220, 220);
+      /* text-align: left; */
+      /* width: fit-content; */
+    }
+
     .charOptionSelect {
       width: 220px;
 
@@ -104,8 +114,13 @@
         </option>
       </select>
 
+      <input type="number" v-model="graphScale" step="0.1"
+        @change="g_appData.svgManager.updateViewBoxScale(g_appData.graphScale)">
+      <br />
+      <!-- <input type="number" v-model="svgManager.viewBoxMinX" step="10" @change="g_appData.svgManager.updateViewBox()">
+      <input type="number" v-model="svgManager.viewBoxMinY" step="10" @change="g_appData.svgManager.updateViewBox()"> -->
     </div>
-    <div>
+    <div v-if="isDebugModeEnabled">
       配置: <select v-model="graph.layout" style="font-size: 18px;" @change="updateGraphAuto()">
         <option v-for="option in layoutOptions" v-bind:value="option.id">
           {{ option.text }}
@@ -116,7 +131,6 @@
           {{ option.text }}
         </option>
       </select>
-
     </div>
     <div style="display: block;position:relative">
       <div v-if="isDebugModeEnabled">
@@ -127,7 +141,7 @@
         </span>
       </div>
 
-      <div id="graph" style="text-align: left;border: 1px solid rgb(220, 220, 220);width:fit-content;position:relative">
+      <div id="graph" class="svg__container">
         <div style="position:absolute;right:0;top:0;">
           <div style="display:inline-block">
             <input type="button" class="topMenuIconButton selectableIcon" value="クリア"
@@ -138,16 +152,14 @@
             style="background-image: url('/images/download.png');" onclick="saveGraphAsPng()">
         </div>
         <!--選択エッジの編集UI-->
-        <textarea id="editSelectedEdgeLabel" v-model="(selectedEdge || {}).label"
-          @change="g_appData.clearSelection();updateGraphAuto();" style="position: absolute;top: 0;left: 0;"
-          v-show="selectedEdge!=null"></textarea>
+        <textarea id="editSelectedEdgeLabel" v-model="(selectedEdge || {}).label" @change="g_appData.clearSelection();"
+          style="position: absolute;top: 0;left: 0;" v-show="selectedEdge!=null"></textarea>
 
-        <!-- <textarea id="editSelectedNodeLabel" v-model="(selectedNode || {}).name"
-          @change="g_appData.clearSelection();updateGraphAuto();" style="position: absolute;top: 0;left: 0;"
-          v-show="selectedNode!=null"></textarea> -->
+        <!--選択ノードの編集UI-->
         <div id="editSelectedNodeLabel" v-show="isNodeLabelEditing" style="position: absolute;top: 0;left: 0;">
           <select2 :options="titleToCharOptions[currentTitle]" v-model="(selectedNode || {}).name"
-            @input="selectedNodeNameChanged()" @close="g_appData.clearSelection()" class="charOptionSelect"></select2>
+            @input="selectedNodeNameChanged()" @close="g_appData.clearSelection();updateGraphAuto();"
+            class="charOptionSelect"></select2>
 
         </div>
 
@@ -155,12 +167,12 @@
       </div>
       <p>{{message}}</p>
     </div>
-    <fieldset class="edgeEditBoxContainer">
+    <fieldset class="edgeEditBoxContainer" v-if="isDebugModeEnabled">
       <legend>選択アイテム</legend>
       <div v-for="node in selectedNodes">
         <span>
           <select2 :options="titleToCharOptions[currentTitle]" v-model="node.name"
-            @input="g_appData.updateNodeInfo(node);updateGraphAuto();" class="charOptionSelect"></select2>
+            @input="g_appData.updateNodeInfo(node);" class="charOptionSelect"></select2>
         </span>
 
         <div v-if="isDebugModeEnabled">
@@ -254,7 +266,7 @@
     </fieldset>
 
 
-    <details>
+    <details v-if="isDebugModeEnabled">
       <summary>グループの設定</summary>
       <input id="showsCluster" v-model="showsCluster" type="checkbox" @change="updateGraph();"><label
         for="showsCluster">グループを表示する</label>
@@ -542,7 +554,6 @@
     function selectedNodeNameChanged(elem) {
       if (g_appData.selectedNode != null) {
         g_appData.updateNodeInfo(g_appData.selectedNode);
-        updateGraphAuto();
       }
     }
     window.addEventListener('load', (event) => {
@@ -551,6 +562,7 @@
           // Enter 時の挙動
           e.preventDefault();
           g_appData.clearSelection();
+          updateGraphAuto();
         }
         else if (e.which === 10) {
           // Ctrl+Enter

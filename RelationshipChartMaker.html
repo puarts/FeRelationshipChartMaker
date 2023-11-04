@@ -153,7 +153,7 @@
         </div>
         <!--選択エッジの編集UI-->
         <textarea id="editSelectedEdgeLabel" v-model="(selectedEdge || {}).label" @change="g_appData.clearSelection();"
-          style="position: absolute;top: 0;left: 0;" v-show="selectedEdge!=null"></textarea>
+          style="position: absolute;top: 0;left: 0;" v-show="isEdgeLabelEditing"></textarea>
 
         <!--選択ノードの編集UI-->
         <div id="editSelectedNodeLabel" v-show="isNodeLabelEditing" style="position: absolute;top: 0;left: 0;">

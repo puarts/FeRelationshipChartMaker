@@ -205,39 +205,64 @@ function updateGraphByD3js(
 
         self.svgManager.setViewBoxSize(viewBoxWidth, viewBoxHeight);
 
+
+        svg.on("dblclick", (e, d) => {
+            // ビューからスケール計算(DOM構築後じゃないと計算できないので、ここで計算)
+            const sizeScale = self.svgManager.calcPhysicalToVirtualViewBoxScale();
+            // const sizeScale = (self.svgManager.svg.node().clientWidth / self.svgManager.viewBoxWidth);// / self.svgManager.viewBoxScale;
+
+            // クリック時にノード追加
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+            console.log(`click (${mouseX}, ${mouseY})`);
+            console.log(e);
+            const nodeId = AppData.estimateNodeId(self.graph);
+            const defaultCharIdAndName = self.titleToCharOptions[self.currentTitle][1];
+            const node = new GraphNode(nodeId, defaultCharIdAndName.id);
+
+            const px = mouseX * sizeScale + Number(self.svgManager.viewBoxMinX) * Number(self.svgManager.viewBoxScale);
+            const py = mouseY * sizeScale + Number(self.svgManager.viewBoxMinY) * Number(self.svgManager.viewBoxScale);
+
+            if (px == NaN || py == NaN) {
+                return;
+            }
+
+            node.setPos(px, py);
+            self.addNode(node);
+            self.selectSingleNode(node);
+            self.updateGraph(graphElementId);
+        });
+
         svg.call(d3.drag()
             .on("start", (e, d) => {
             })
             .on("drag", (e, d) => {
             })
             .on("end", (e, d) => {
-                // ビューからスケール計算(DOM構築後じゃないと計算できないので、ここで計算)
-                const sizeScale = self.svgManager.calcPhysicalToVirtualViewBoxScale();
-                // const sizeScale = (self.svgManager.svg.node().clientWidth / self.svgManager.viewBoxWidth);// / self.svgManager.viewBoxScale;
+                // // ビューからスケール計算(DOM構築後じゃないと計算できないので、ここで計算)
+                // const sizeScale = self.svgManager.calcPhysicalToVirtualViewBoxScale();
+                // // const sizeScale = (self.svgManager.svg.node().clientWidth / self.svgManager.viewBoxWidth);// / self.svgManager.viewBoxScale;
 
-                // クリック時にノード追加
-                console.log(`click (${e.x}, ${e.y})`);
-                const nodeId = AppData.estimateNodeId(self.graph);
-                const defaultCharIdAndName = self.titleToCharOptions[self.currentTitle][1];
-                const node = new GraphNode(nodeId, defaultCharIdAndName.id);
+                // // クリック時にノード追加
+                // console.log(`click (${e.x}, ${e.y})`);
+                // const nodeId = AppData.estimateNodeId(self.graph);
+                // const defaultCharIdAndName = self.titleToCharOptions[self.currentTitle][1];
+                // const node = new GraphNode(nodeId, defaultCharIdAndName.id);
 
-                const clientWidth = self.svgManager.svg.node().clientWidth;
-                const clientHeight = self.svgManager.svg.node().clientHeight;
-                const s = viewBoxWidth / clientWidth;
-                // const px = (e.x + self.svgManager.viewBoxMinX * clientWidth / viewBoxWidth) * (viewBoxWidth / clientWidth) * self.svgManager.viewBoxScale;
-                // const py = (e.y + self.svgManager.viewBoxMinY * clientHeight / viewBoxHeight) * s * self.svgManager.viewBoxScale;
+                // const clientWidth = self.svgManager.svg.node().clientWidth;
+                // const px = e.x * sizeScale + Number(self.svgManager.viewBoxMinX) * Number(self.svgManager.viewBoxScale);
+                // const py = e.y * sizeScale + Number(self.svgManager.viewBoxMinY) * Number(self.svgManager.viewBoxScale);
 
-                const px = e.x * sizeScale + Number(self.svgManager.viewBoxMinX) * Number(self.svgManager.viewBoxScale);
-                const py = e.y * sizeScale + Number(self.svgManager.viewBoxMinY) * Number(self.svgManager.viewBoxScale);
+                // if (px == NaN || py == NaN) {
+                //     return;
+                // }
 
-                if (px == NaN || py == NaN) {
-                    return;
-                }
+                // node.setPos(px, py);
+                // self.addNode(node);
+                // self.selectSingleNode(node);
+                // self.updateGraph(graphElementId);
+                self.clearSelection();
 
-                node.setPos(px, py);
-                self.addNode(node);
-                self.selectSingleNode(node);
-                self.updateGraph(graphElementId);
             }));
 
         // ノードの位置が原点にある場合だけ自動的にレイアウトを決めます。
@@ -273,6 +298,7 @@ function updateGraphByD3js(
         })
         .on("end", (e, d) => {
             self.selectSingleEdge(d);
+            self.isEdgeLabelEditing = true;
             if (d != null) {
                 // ビューからスケール計算(DOM構築後じゃないと計算できないので、ここで計算)
                 const sizeScale = self.svgManager.calcVirtualToPhysicalViewBoxScale();
@@ -326,13 +352,14 @@ function updateGraphByD3js(
             .attr("stroke-width", 2)
             .attr("stroke", "gray")
             .attr("class", "selectableIcon")
-            .on("mouseover", (event, d) => {
-                d.mouseOver = true;
-            })
-            .on("mouseout", (event, d) => {
-                d.mouseOver = false;
-            })
-            .call(dragEdgeEvent);
+            .call(d3.drag()
+                .on("start", (e, d) => {
+                })
+                .on("drag", (e, d) => {
+                })
+                .on("end", (e, d) => {
+                    self.selectSingleEdge(d);
+                }));
 
     const edgeLabelShadowSize = 1;
     const edgeLabelShadowColor = "#fff";
@@ -344,6 +371,7 @@ function updateGraphByD3js(
         .style("text-shadow", `${edgeLabelShadowColor} ${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px 0px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px 0px 0px`)
         .call(dragEdgeEvent);
 
+    // シミュレーションが終わらないようにアルファターゲットを0.01に設定
     const simulation = d3.forceSimulation(graph.nodes).alphaTarget(0.01);
 
     const dragNodeCalls = d3.drag()
@@ -351,32 +379,34 @@ function updateGraphByD3js(
             // if (!e.active) simulation.alpha(0.3).restart();
             d.fx = e.x;
             d.fy = e.y;
-            d.dragStartPosX = e.x;
-            d.dragStartPosY = e.y;
-            d.isDragMoved = false;
+            // d.dragStartPosX = e.x;
+            // d.dragStartPosY = e.y;
+            // d.isDragMoved = false;
         })
         .on("drag", (e, d) => {
             d.fx = e.x;
             d.fy = e.y;
-            if (!d.isDragMoved) {
-                const distSqure = (d.dragStartPosX - e.x) * (d.dragStartPosX - e.x) + (d.dragStartPosY - e.y) * (d.dragStartPosY - e.y);
-                const distThreshold = 2;
-                if (distSqure > (distThreshold * distThreshold)) {
-                    d.isDragMoved = true;
-                }
-            }
+            // if (!d.isDragMoved) {
+            //     const distSqure = (d.dragStartPosX - e.x) * (d.dragStartPosX - e.x) + (d.dragStartPosY - e.y) * (d.dragStartPosY - e.y);
+            //     const distThreshold = 2;
+            //     if (distSqure > (distThreshold * distThreshold)) {
+            //         d.isDragMoved = true;
+            //     }
+            // }
         })
         .on("end", (e, d) => {
             // if (!e.active) simulation.alphaTarget(0);
 
             d.fx = null;
             d.fy = null;
-            if (!d.isSelected) {
-                self.selectSingleNode(d);
-            }
-            else if (!d.isDragMoved) {
-                self.toggleSelectNode(d);
-            }
+            // if (!d.isSelected) {
+            //     self.selectSingleNode(d);
+            // }
+            // else if (!d.isDragMoved) {
+            //     self.toggleSelectNode(d);
+            // }
+
+            self.selectSingleNode(d);
         });
 
 
@@ -436,8 +466,28 @@ function updateGraphByD3js(
         // .attr("filter", "url(#solid)")
         .call(editNodeLabelEvent);
 
-    const edgeDragPoints = createOrUpdateGroupedSvgElems(svg, graph.nodes, "edgePoints", "circle")
+    const edgeLabelClickPoints = createOrUpdateGroupedSvgElems(svg, graph.edges, "edgeLabelClickPoints", "rect")
         .attr("r", 10)
+        .attr("fill", "#fff")
+        .attr("stroke-width", "1")
+        .attr("stroke", "#000")
+        .on("mouseover", (event, d) => {
+            d.mouseOver = true;
+            edgeLabelClickPoints
+                .attr("width", d => {
+                    return d.mouseOver || d.isSelected ? 50 : 0
+                });
+        })
+        .on("mouseout", (event, d) => {
+            d.mouseOver = false;
+            edgeLabelClickPoints
+                .attr("width", d => {
+                    return d.mouseOver || d.isSelected ? 50 : 0
+                });
+        })
+        .call(dragEdgeEvent);
+
+    const edgeDragPoints = createOrUpdateGroupedSvgElems(svg, graph.nodes, "edgePoints", "circle")
         .attr("fill", "#fb9")
         .attr("stroke-width", "5")
         .attr("stroke", "#e96")
@@ -515,6 +565,23 @@ function updateGraphByD3js(
                 });
         });
 
+    links
+        .on("mouseover", (event, d) => {
+            if (d.label != "") return;
+            d.mouseOver = true;
+            edgeLabelClickPoints
+                .attr("r", d => {
+                    return d.mouseOver || d.isSelected ? 10 : 0
+                });
+        })
+        .on("mouseout", (event, d) => {
+            if (d.label != "") return;
+            d.mouseOver = false;
+            edgeLabelClickPoints
+                .attr("r", d => {
+                    return d.mouseOver || d.isSelected ? 10 : 0
+                });
+        });
 
     simulation
         .on("tick", () => {
@@ -533,6 +600,7 @@ function updateGraphByD3js(
                 .attr("y2", d => d.destinationNode?.y ?? 0)
                 .attr("marker-start", d => d.dir == "back" || d.dir == "both" ? "url(#arrow)" : "")
                 .attr("marker-end", d => d.dir == "forward" || d.dir == "both" ? "url(#arrow)" : "")
+                .attr("stroke", d => d.isSelected || d.mouseOver ? "#ddd" : "gray")
                 ;
 
             previewLinks
@@ -546,6 +614,17 @@ function updateGraphByD3js(
                 .attr("y", d => getEdgeLabelPositionY(d, fontSize))
                 .html(d => getEdgeLabel(d, fontSize));
 
+            edgeLabelClickPoints
+                .attr("x", d => getEdgeLabelPositionX(d) - 50 / 2)
+                .attr("y", d => getEdgeLabelPositionY(d, fontSize) - 10 / 2)
+                .attr("width", d => {
+                    return d.mouseOver ? 50 : 0
+                })
+                .attr("height", d => {
+                    return d.mouseOver ? 20 : 0
+                })
+                ;
+
             const selectionBorderWidth = 5;
             nodeSelectionCircles
                 .attr("cx", d => d.x)
@@ -557,7 +636,7 @@ function updateGraphByD3js(
                 .attr("cx", d => d.x)
                 .attr("cy", d => d.y - radius)
                 .attr("r", d => {
-                    return d.mouseOver || d.isSelected ? 10 : 0
+                    return d.mouseOver ? 10 : 0
                 });
 
             nodeImages

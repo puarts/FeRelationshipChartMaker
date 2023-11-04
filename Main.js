@@ -259,6 +259,7 @@ class AppData extends SqliteDatabase {
         this.selectedEdge = null;
 
         this.isNodeLabelEditing = false;
+        this.isEdgeLabelEditing = false;
     }
 
     createNewFilterCharacter() {
@@ -655,11 +656,15 @@ class AppData extends SqliteDatabase {
         this.__removeClusterFromOptions(cluster);
     }
 
-    removeSelectedNodes() {
+    removeSelectedItems() {
         for (const node of this.selectedNodes) {
             this.graph.nodes.splice(this.graph.nodes.indexOf(node), 1);
         }
-        this.selectedNodes = [];
+        for (const edge of this.selectedEdges) {
+            this.graph.edges.splice(this.graph.edges.indexOf(edge), 1);
+        }
+
+        this.clearSelection();
     }
 
     /**
@@ -723,6 +728,7 @@ class AppData extends SqliteDatabase {
         for (const n of this.graph.edges) {
             n.isSelected = false;
         }
+        this.isEdgeLabelEditing = false;
     }
     clearSelection() {
         this.clearNodeSelection();
@@ -738,6 +744,7 @@ class AppData extends SqliteDatabase {
         targetNode.isSelected = true;
         this.selectedNode = targetNode;
         this.isNodeLabelEditing = false;
+        this.isEdgeLabelEditing = false;
     }
 
     selectSingleEdge(targetEdge) {
@@ -1278,7 +1285,7 @@ function importUrl(url, edgeInitDelay = 0) {
 
 document.addEventListener("keydown", function (event) {
     if (event.key === "Delete") {
-        g_appData.removeSelectedNodes();
+        g_appData.removeSelectedItems();
         updateGraph();
     }
 });

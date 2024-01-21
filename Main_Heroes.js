@@ -1,6 +1,6 @@
 
-ThumbRoot = "/blog/images/FehHeroThumbs/";
-BaseUrl = "https://puarts.com/?pid=1839";
+ThumbRoot = "https://fire-emblem.fun/images/FehHeroThumbs/";
+BaseUrl = "https://www.fire-emblem.fun/?pid=1839";
 
 /**
  * @param  {CharacterInfo[]} characters
@@ -17,6 +17,7 @@ function initMain(characters) {
             const idIndex = queryResult.columns.indexOf("id");
             const thumbIndex = queryResult.columns.indexOf("thumb");
             const originIndex = queryResult.columns.indexOf("origin");
+            const playable = queryResult.columns.indexOf("playable");
             const characters = [];
             for (const columnValues of queryResult.values) {
                 const id = columnValues[idIndex];
@@ -27,7 +28,7 @@ function initMain(characters) {
                 origin = isNullOrEmpty(origin) ? [] : parseSqlStringToArray(origin);
                 let imageName = columnValues[thumbIndex];
                 imageName = isNullOrEmpty(imageName) ? getOriginalCharacterImageNameFromEnglishName(
-                    name, englishName, origin, variation) : imageName;
+                    name, englishName, origin, variation, playable) : imageName;
 
                 const info = new CharacterInfo(
                     id,

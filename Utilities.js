@@ -52,7 +52,8 @@ function isNullOrEmpty(value) {
     return value == null || value == "";
 }
 function parseSqlStringToArray(str) {
-    return str.split('|').filter(x => x != "");
+    if (isNullOrEmpty(str)) return [];
+    return Array.from(str.split('|').filter(x => x != ""));
 }
 /**
  * @param  {string} name
@@ -61,7 +62,7 @@ function parseSqlStringToArray(str) {
  * @param  {string} variation
  */
 function getOriginalCharacterImageNameFromEnglishName(
-    name, englishName, series, variation
+    name, englishName, series, variation, playable = true
 ) {
     englishName = englishName.replace("'", "");
     englishName = englishName.replace("& ", "");
@@ -103,6 +104,10 @@ function getOriginalCharacterImageNameFromEnglishName(
     if (series.includes("風花雪月")) {
         if (variation === "変化後") {
             basePath = basePathToName + "_Enlightened_" + seriesName;
+        }
+        if (!playable) {
+            const filePath = basePath + ".png";
+            return filePath;
         }
         const suffixList = [
             "_War_Arc",

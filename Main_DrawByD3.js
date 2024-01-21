@@ -97,7 +97,7 @@ function createOrUpdateGroupedSvgElems(svg, newDataSet, groupId, elemName) {
 function createOrUpdateSvgElems(parentElem, newDataSet, elemName) {
     const elems = parentElem
         .selectAll(elemName)
-        .data(newDataSet);
+        .data(newDataSet, d => d.id); // key関数としてd.idを使用する
     elems.exit().remove();
     const newElems = elems
         .enter()
@@ -652,7 +652,7 @@ function updateGraphByD3js(
                 ;
 
             nodeLabels
-                .text(x => x.displayName)
+                .text(d => d.displayName)
                 .attr("x", d => d.x)
                 .attr("y", d => getNodeLabelPositionY(d, radius));
 

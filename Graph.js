@@ -399,6 +399,27 @@ class Graph {
         this.nameToNodes[node.name] = node;
     }
 
+    removeNode(node) {
+        this.nodes.splice(this.nodes.indexOf(node), 1);
+        delete this.idToNodes[node.id];
+        delete this.nameToNodes[node.name];
+    }
+
+    removeEdge(edge) {
+        this.edges.splice(this.nodes.indexOf(edge), 1);
+    }
+
+    /**
+     * 存在しないノードを参照するエッジを削除します
+     */
+    removeInvalidEdges() {
+        const invalidEdges = Array.from(this.edges.filter(
+            edge => !(edge.source in this.idToNodes) || !(edge.destination in this.idToNodes)));
+        for (const edge of invalidEdges) {
+            this.removeEdge(edge);
+        }
+    }
+
     updateDictionaries() {
         this.idToNodes = {};
         this.nameToNodes = {};

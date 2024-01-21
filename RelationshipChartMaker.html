@@ -8,14 +8,7 @@
 </head>
 
 <body style="text-align: left;">
-  <details style="margin: 10px;">
-    <summary>ツール説明</summary>
-    <p>
-      FEの人物相関図を簡単に作れるツールです。2人のキャラとその関係を入力すると関係を1つ追加できます。関係は+ボタンで増やす事ができます。
-      できた人物相関図は画像として保存できますが、端末によっては正しく保存できないことがあります。邪魔な位置に広告が表示された場合はお手数ですがページのリロードをお願いします。</p>
-
-  </details>
-  <div style="clear: both;"></div>
+  <p>FEの人物相関図を作るためのツールです。作りかけです。</p>
   <style>
     .svg__container {
       position: relative;
@@ -105,7 +98,42 @@
       width: fit-content;
       height: fit-content;
     }
+
+    dt {
+      font-weight: bold;
+    }
+
+    dd {
+      margin-inline-start: 10px;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
   </style>
+
+  <details style="margin: 10px;">
+    <summary>ツール説明</summary>
+    <dl>
+      <dt>グラフの拡大縮小</dt>
+      <dd>
+        マウススクロールで拡大縮小できます。
+      </dd>
+      <dt>グラフの移動</dt>
+      <dd>
+        マウスス中ボタンのドラッグ移動でグラフを移動できます。
+      </dd>
+      <dt>ノードの作成</dt>
+      <dd>ダブルクリックでノードを作成できます。</dd>
+      <dt>エッジの作成</dt>
+      <dd>ノードマウスオーバー時にノード上に表示される円を左マウスボタンでドラッグし、別のノード上にドロップすることで、それらのノード間を繋ぐエッジを作成できます。</dd>
+      <dt>ノードのキャラ変更</dt>
+      <dd>ノードのキャラ名をクリックするとキャラを変更できます。</dd>
+      <dt>エッジのラベル変更</dt>
+      <dd>エッジマウスオーバー時にエッジ上に表示される四角、もしくは既に設定したラベルをクリックするとエッジラベルを変更できます。</dd>
+    </dl>
+
+  </details>
+  <div style="clear: both;"></div>
+
   <div id="app" style="text-align: left;">
     <div>
       作品: <select v-model="currentTitle" style="font-size: 18px;">
@@ -113,12 +141,6 @@
           {{ option.text }}
         </option>
       </select>
-
-      <input type="number" v-model="graphScale" step="0.1"
-        @change="g_appData.svgManager.updateViewBoxScale(g_appData.graphScale)">
-      <br />
-      <!-- <input type="number" v-model="svgManager.viewBoxMinX" step="10" @change="g_appData.svgManager.updateViewBox()">
-      <input type="number" v-model="svgManager.viewBoxMinY" step="10" @change="g_appData.svgManager.updateViewBox()"> -->
     </div>
     <div v-if="isDebugModeEnabled">
       配置: <select v-model="graph.layout" style="font-size: 18px;" @change="updateGraphAuto()">
@@ -166,6 +188,14 @@
 
       </div>
       <p>{{message}}</p>
+    </div>
+    <div v-if="isDebugModeEnabled">
+      <input type="number" v-model="graphScale" step="0.1" readonly
+        @change="g_appData.svgManager.updateViewBoxScale(g_appData.graphScale)">
+      <br />
+      <!-- <input type="number" v-model="svgManager.viewBoxMinX" step="10" @change="g_appData.svgManager.updateViewBox()">
+                  <input type="number" v-model="svgManager.viewBoxMinY" step="10" @change="g_appData.svgManager.updateViewBox()"> -->
+
     </div>
     <fieldset class="edgeEditBoxContainer" v-if="isDebugModeEnabled">
       <legend>選択アイテム</legend>
@@ -543,12 +573,13 @@
   <script src="/node_modules/d3-graphviz/build/d3-graphviz.js"></script>
   <script src="/js/sql.js/dist/sql-wasm.js"></script>
 
-  <script src="/FehTools/FehRelationshipChartMaker/Graph.js?20230619"></script>
-  <script src="/FehTools/FehRelationshipChartMaker/Utilities.js?20231015"></script>
-  <script src="/FehTools/FehRelationshipChartMaker/SqliteDatabase.js?20230618_1"></script>
-  <script src="/FehTools/FehRelationshipChartMaker/Main_DrawByD3.js?20230618_1"></script>
-  <script src="/FehTools/FehRelationshipChartMaker/Main.js?20230618_1"></script>
-  <script src="/FehTools/FehRelationshipChartMaker/Main_OriginalChar.js?20230618_1"></script>
+  <script src="/FehTools/RelationshipChartMaker/Graph.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/Utilities.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/SqliteDatabase.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/CharacterInfo.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main_DrawByD3.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main_OriginalChar.js?20231105"></script>
 
   <script>
     function selectedNodeNameChanged(elem) {

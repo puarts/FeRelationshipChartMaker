@@ -1,6 +1,6 @@
 
 const GraphElemId = "graph";
-const g_dummyImagePath = "/blog/images/FehCylPortraits/Unknown.png";
+const g_dummyImagePath = "https://fire-emblem.fun/images/FehCylPortraits/Unknown.png";
 
 
 function toDataURLAsync(url, callback) {
@@ -34,7 +34,6 @@ function toDataUrlSync(url) {
 
 const g_imagePathToDataCache = {};
 
-let ThumbRoot = "/blog/images/FehCylPortraits/";
 
 function convertImageElementUrlToDataUrl(rootElement, endCallback) {
     let convertTargetUrls = [];
@@ -92,50 +91,6 @@ class TagInfo {
     }
 }
 
-class CharacterInfo {
-    constructor(id, name, englishName, imageName, series, tags, variation, otherNames = []) {
-        /** @type {number} */
-        this.id = id;
-        /** @type {string} */
-        this.name = name;
-        /** @type {string} */
-        this.englishName = englishName;
-        /** @type {string[]} */
-        this.series = series;
-        /** @type {string[]} */
-        this.tags = tags;
-        this.variation = variation;
-        this.imageName = imageName;
-        /** @type {string[]} */
-        this.otherNames = otherNames;
-
-        this.addsOtherNameToDisplayName = false;
-    }
-
-    get displayName() {
-        if (this.addsOtherNameToDisplayName) {
-            let suffix = "";
-            if (this.otherNames != null && this.otherNames.length > 0) {
-                suffix += `\n(${this.otherNames[0]})`;
-            }
-            return this.name + suffix;
-        }
-        return this.name;
-    }
-
-    get imagePath() {
-        if (this.imageName == "" || this.imageName == null) {
-            return "";
-        }
-        else {
-            return ThumbRoot + this.imageName;
-        }
-    }
-
-    get url() {
-        return `https://puarts.com/?fechar=${this.id}#main-content`;
-    }
-}
 
 class FilterCategory {
     constructor(id, name) {
@@ -215,9 +170,8 @@ class AppData extends SqliteDatabase {
             { id: "RL", text: "左向き" },
         ];
 
-        // this.layout = "dot";
-        // this.layout = "dot";
-        // this.rankdir = "BT";
+        this.layout = "dot";
+        this.rankdir = "BT";
 
         this.filterCharacters = [new GraphNode(-1, NoneValue)];
         /** @type {FilterCategory[]} */
@@ -274,7 +228,7 @@ class AppData extends SqliteDatabase {
     updateTweetUrl() {
         const url = encodeURIComponent(this.exportSettingUrl);
         const text = encodeURIComponent("#FE人物相関図メーカー");
-        const originalReferer = encodeURIComponent("https://puarts.com/");
+        const originalReferer = encodeURIComponent("https://www.fire-emblem.fun/");
         const refSrc = encodeURIComponent("twsrc^tfw|twcamp^buttonembed|twterm^share|twgr^");
         const uri = "https://twitter.com/intent/tweet?"
             + "original_referer=" + originalReferer
@@ -658,11 +612,14 @@ class AppData extends SqliteDatabase {
 
     removeSelectedItems() {
         for (const node of this.selectedNodes) {
-            this.graph.nodes.splice(this.graph.nodes.indexOf(node), 1);
+            this.graph.removeNode(node);
         }
         for (const edge of this.selectedEdges) {
+            this.graph.removeEdge(edge);
             this.graph.edges.splice(this.graph.edges.indexOf(edge), 1);
         }
+
+        this.graph.removeInvalidEdges();
 
         this.clearSelection();
     }
@@ -1237,7 +1194,7 @@ function svg2imageData(svgElement, successCallback, errorCallback) {
     });
 }
 
-const BaseUrl = "https://puarts.com/?pid=1779";
+const BaseUrl = "https://www.fire-emblem.fun/?pid=1779";
 
 function updateUrl() {
     g_appData.writeLogLine(`■URLの更新`);

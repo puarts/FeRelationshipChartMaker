@@ -206,14 +206,21 @@ class AppData extends SqliteDatabase {
         /** @type {GraphEdge[]} */
         this.selectedEdges = [];
 
+        /** @type {GraphComment[]} */
+        this.selectedComments = [];
+
         /** @type {GraphNode} */
         this.selectedNode = null;
 
         /** @type {GraphEdge} */
         this.selectedEdge = null;
 
+        /** @type {GraphComment} */
+        this.selectedComment = null;
+
         this.isNodeLabelEditing = false;
         this.isEdgeLabelEditing = false;
+        this.isCommentEditing = false;
     }
 
     createNewFilterCharacter() {
@@ -305,6 +312,8 @@ class AppData extends SqliteDatabase {
         this.selectedNode = null;
         this.selectedEdges = [];
         this.selectedEdge = null;
+        this.selectedComments = [];
+        this.selectedComment = null;
     }
 
     addNode(node) {
@@ -616,7 +625,9 @@ class AppData extends SqliteDatabase {
         }
         for (const edge of this.selectedEdges) {
             this.graph.removeEdge(edge);
-            this.graph.edges.splice(this.graph.edges.indexOf(edge), 1);
+        }
+        for (const comment of this.selectedComments) {
+            this.graph.removeComment(comment);
         }
 
         this.graph.removeInvalidEdges();
@@ -687,9 +698,19 @@ class AppData extends SqliteDatabase {
         }
         this.isEdgeLabelEditing = false;
     }
+    clearCommentSelection() {
+        this.selectedComments = [];
+        this.selectedComment = null;
+        for (const n of this.graph.comments) {
+            n.isSelected = false;
+        }
+        this.isCommentEditing = false;
+
+    }
     clearSelection() {
         this.clearNodeSelection();
         this.clearEdgeSelection();
+        this.clearCommentSelection();
     }
 
     selectSingleNode(targetNode) {
@@ -702,6 +723,14 @@ class AppData extends SqliteDatabase {
         this.selectedNode = targetNode;
         this.isNodeLabelEditing = false;
         this.isEdgeLabelEditing = false;
+        this.isCommentEditing = false;
+    }
+
+    selectSingleComment(targetComment) {
+        this.clearSelection();
+        this.selectedComments = [targetComment];
+        this.selectedComment = targetComment;
+        targetComment.isSelected = true;
     }
 
     selectSingleEdge(targetEdge) {
@@ -936,6 +965,7 @@ class AppData extends SqliteDatabase {
         if (this.graph.layout == "") {
             displayGraph.edges = this.__getFilteredEdges();
             displayGraph.nodes = this.graph.nodes;
+            displayGraph.comments = this.graph.comments;
         }
         else {
             const edges = this.__getFilteredEdges();

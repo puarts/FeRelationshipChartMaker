@@ -318,6 +318,22 @@ class GraphCluster {
     }
 }
 
+let g_commentId = 0;
+class GraphComment {
+    constructor(text) {
+        this.id = g_commentId++;
+        this.text = text;
+        this.x = 0;
+        this.y = 0;
+        this.isSelected = false;
+    }
+
+    setPos(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
 class Graph {
     constructor() {
         /** @type {GraphNode[]} */
@@ -330,6 +346,9 @@ class Graph {
 
         /** @type {GraphEdge[]} */
         this.edges = [];
+
+        /** @type {GraphComment[]} */
+        this.comments = [];
 
         /** @type {GraphCluster[]} */
         this.clusters = [];
@@ -399,6 +418,10 @@ class Graph {
         this.nameToNodes[node.name] = node;
     }
 
+    addComment(comment) {
+        this.comments.push(comment);
+    }
+
     removeNode(node) {
         this.nodes.splice(this.nodes.indexOf(node), 1);
         delete this.idToNodes[node.id];
@@ -406,7 +429,11 @@ class Graph {
     }
 
     removeEdge(edge) {
-        this.edges.splice(this.nodes.indexOf(edge), 1);
+        this.edges.splice(this.edges.indexOf(edge), 1);
+    }
+
+    removeComment(comment) {
+        this.comments.splice(this.comments.indexOf(comment), 1);
     }
 
     /**

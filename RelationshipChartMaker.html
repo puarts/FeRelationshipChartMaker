@@ -125,6 +125,8 @@
       <dd>ダブルクリックでノードを作成できます。</dd>
       <dt>エッジの作成</dt>
       <dd>ノードマウスオーバー時にノード上に表示される円を左マウスボタンでドラッグし、別のノード上にドロップすることで、それらのノード間を繋ぐエッジを作成できます。</dd>
+      <dt>コメントの作成</dt>
+      <dd>Ctrlキー+ダブルクリックでコメントを作成できます。</dd>
       <dt>ノードのキャラ変更</dt>
       <dd>ノードのキャラ名をクリックするとキャラを変更できます。</dd>
       <dt>エッジのラベル変更</dt>
@@ -182,9 +184,11 @@
           <select2 :options="titleToCharOptions[currentTitle]" v-model="(selectedNode || {}).name"
             @input="selectedNodeNameChanged()" @close="g_appData.clearSelection();updateGraphAuto();"
             class="charOptionSelect"></select2>
-
         </div>
 
+        <!--選択コメントの編集UI-->
+        <textarea id="editSelectedComment" v-model="(selectedComment || {}).text" @change="g_appData.clearSelection();"
+          style="position: absolute;top: 0;left: 0;" v-show="isCommentEditing"></textarea>
 
       </div>
       <p>{{message}}</p>
@@ -573,12 +577,12 @@
   <script src="/node_modules/d3-graphviz/build/d3-graphviz.js"></script>
   <script src="/js/sql.js/dist/sql-wasm.js"></script>
 
-  <script src="/FehTools/RelationshipChartMaker/Graph.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/Graph.js?20240121"></script>
   <script src="/FehTools/RelationshipChartMaker/Utilities.js?20231105"></script>
   <script src="/FehTools/RelationshipChartMaker/SqliteDatabase.js?20231105"></script>
   <script src="/FehTools/RelationshipChartMaker/CharacterInfo.js?20231105"></script>
-  <script src="/FehTools/RelationshipChartMaker/Main_DrawByD3.js?20231105"></script>
-  <script src="/FehTools/RelationshipChartMaker/Main.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main_DrawByD3.js?20240121"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main.js?20240121"></script>
   <script src="/FehTools/RelationshipChartMaker/Main_OriginalChar.js?20231105"></script>
 
   <script>
@@ -600,7 +604,18 @@
           g_appData.selectedEdge.label += '\r\n';
         }
       });
-
+      $("#editSelectedComment").keypress(function (e) {
+        if (e.which === 13 && !e.shiftKey) {
+          // Enter 時の挙動
+          e.preventDefault();
+          g_appData.clearSelection();
+          updateGraphAuto();
+        }
+        else if (e.which === 10) {
+          // Ctrl+Enter
+          g_appData.selectedComment.text += '\r\n';
+        }
+      });
       initMain(null);
       g_appData.showsCluster = true;
     });

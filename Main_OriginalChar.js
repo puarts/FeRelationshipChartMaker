@@ -23,6 +23,11 @@ function initMain(characters) {
             g_appData.addNode(node2);
             g_appData.graph.edges.push(new GraphEdge(node0.id, node1.id, "父"));
             g_appData.graph.edges.push(new GraphEdge(node0.id, node2.id, "幼馴染", "both"));
+            {
+                const comment = new GraphComment("これはテストです");
+                comment.setPos(50, 50);
+                g_appData.graph.comments.push(comment);
+            }
             updateGraph();
         });
 }

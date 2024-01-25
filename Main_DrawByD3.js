@@ -740,7 +740,7 @@ function updateGraphByD3js(
                 ;
 
             nodeLabels
-                .text(d => d.displayName + `(${d.id})`)
+                .text(d => d.displayName)
                 .attr("x", d => d.x)
                 .attr("y", d => getNodeLabelPositionY(d, radius));
 

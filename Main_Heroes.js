@@ -1,6 +1,6 @@
 
 ThumbRoot = "https://fire-emblem.fun/images/FehHeroThumbs/";
-BaseUrl = "https://www.fire-emblem.fun/?pid=1839";
+BaseUrl = "https://fire-emblem.fun/?pid=1839";
 
 /**
  * @param  {CharacterInfo[]} characters

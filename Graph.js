@@ -4,7 +4,7 @@ const GraphPropDelim = "|~";
 
 class GraphNode {
     constructor(id, name, displayName = "", imagePath = null, url = "") {
-        /** ノードのID @type {Number} */
+        /** エッジの接続に使用するノードのID @type {Number} */
         this.id = id;
 
         /** ノードの名前 @type {string} */
@@ -39,7 +39,8 @@ class GraphNode {
     }
 
     toString() {
-        return this.name
+        return this.id
+            + NodeAndEdgePropDelim + this.name
             + NodeAndEdgePropDelim + this.x
             + NodeAndEdgePropDelim + this.y;
     }
@@ -50,6 +51,7 @@ class GraphNode {
     fromString(source) {
         let elems = source.split(NodeAndEdgePropDelim);
         let i = 0;
+        this.id = elems[i++];
         this.name = elems[i++];
         this.x = Number(elems[i++]);
         this.y = Number(elems[i++]);
@@ -332,6 +334,26 @@ class GraphComment {
         this.x = x;
         this.y = y;
     }
+
+    /**
+     * @returns {string}
+     */
+    toString() {
+        return this.text
+            + NodeAndEdgePropDelim + this.x
+            + NodeAndEdgePropDelim + this.y;
+    }
+
+    /**
+     * @param  {string} source
+     */
+    fromString(source) {
+        let elems = source.split(NodeAndEdgePropDelim);
+        let i = 0;
+        this.text = elems[i++];
+        this.x = Number(elems[i++]);
+        this.y = Number(elems[i++]);
+    }
 }
 
 class Graph {
@@ -359,6 +381,7 @@ class Graph {
     clear() {
         this.nodes = [];
         this.edges = [];
+        this.comments = [];
         this.clusters = [];
         this.idToNodes = {};
         this.nameToNodes = {};
@@ -372,6 +395,7 @@ class Graph {
             + GraphPropDelim + this.nodes.map(x => x.toString()).join(";")
             + GraphPropDelim + this.edges.map(x => x.toString()).join(";")
             + GraphPropDelim + this.clusters.map(x => x.toString()).join(";")
+            + GraphPropDelim + this.comments.map(x => x.toString()).join(";")
             ;
     }
 
@@ -389,7 +413,7 @@ class Graph {
             for (const nodeStr of nodesStr.split(";")) {
                 const node = new GraphNode(-1, "");
                 node.fromString(nodeStr);
-                this.nodes.push(node);
+                this.addNode(node);
             }
         }
         const edgesStr = elems[i++];
@@ -397,7 +421,7 @@ class Graph {
             for (const edgeStr of edgesStr.split(";")) {
                 const edge = new GraphEdge("", "");
                 edge.fromString(edgeStr);
-                this.edges.push(edge);
+                this.addEdge(edge);
             }
         }
         const clustersStr = elems[i++];
@@ -408,7 +432,16 @@ class Graph {
                 this.clusters.push(cluster);
             }
         }
+        const commentsStr = elems[i++];
+        if (commentsStr != undefined && commentsStr != "") {
+            for (const commentStr of commentsStr.split(";")) {
+                const comment = new GraphComment("");
+                comment.fromString(commentStr);
+                this.addComment(comment);
+            }
+        }
     }
+
     /**
      * @param  {GraphNode} node
      */
@@ -416,6 +449,21 @@ class Graph {
         this.nodes.push(node);
         this.idToNodes[node.id] = node;
         this.nameToNodes[node.name] = node;
+    }
+
+    /**
+     * @param  {GraphEdge} edge
+     */
+    addEdge(edge) {
+        edge.sourceNode = edge.source in this.idToNodes ? this.idToNodes[edge.source] : null;
+        edge.destinationNode = edge.destination in this.idToNodes ? this.idToNodes[edge.destination] : null;
+        if (edge.sourceNode == null) {
+            edge.source = -1;
+        }
+        if (edge.destinationNode == null) {
+            edge.destination = -1;
+        }
+        this.edges.push(edge);
     }
 
     addComment(comment) {

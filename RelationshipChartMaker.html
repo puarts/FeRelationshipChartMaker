@@ -201,8 +201,10 @@
                   <input type="number" v-model="svgManager.viewBoxMinY" step="10" @change="g_appData.svgManager.updateViewBox()"> -->
 
     </div>
-    <fieldset class="edgeEditBoxContainer" v-if="isDebugModeEnabled">
-      <legend>選択アイテム</legend>
+
+    <input id="showDialog" type="button" value="選択アイテムの設定" @click="showSettingDialog();">
+
+    <div id="settingDialog">
       <div v-for="node in selectedNodes">
         <span>
           <select2 :options="titleToCharOptions[currentTitle]" v-model="node.name"
@@ -297,7 +299,17 @@
           </div>
         </div>
       </div>
-    </fieldset>
+    </div>
+
+
+    <!-- <div>
+      <input type="button" value="インポート" @click="importGraph()">
+      <input type="button" value="エクスポート" @click="exportGraph()">
+      <div>
+        <textarea id="graphSetting" v-model="graphSettingText" style="width: 400px;height: 50px;"></textarea>
+      </div>
+
+    </div> -->
 
 
     <details v-if="isDebugModeEnabled">
@@ -356,7 +368,6 @@
       以下のURLで設定を再現する事ができます。<br />
       <input type="button" value="コピー" @click="copyUrl()">
       <input type="button" value="このURLをツイート" @click="location.href=g_appData.tweetUrl;">
-      <!-- <input type="button" value="インポート" @click="importUrl(g_appData.currentUrl)"> -->
       <br />
       <textarea id="urlTextArea" v-model="exportSettingUrl" style="width: 400px;height: 50px;" readonly></textarea>
 
@@ -364,6 +375,15 @@
     </p>
     <p>
     <div v-show="isDebugModeEnabled">
+      <div>
+        <input type="button" value="URL強制インポート" @click="importUrl(g_appData.debugImportUrl, 1)">
+        <br />
+        <textarea v-model="debugImportUrl" style="width: 600px;height:100px;"></textarea>
+        <br />
+        ログ:<br />
+        <textarea v-model="log" style="width: 600px;height: 300px; "></textarea>
+      </div>
+
       <fieldset class="edgeEditBoxContainer" style="display: inline-block;">
         <legend>graph.nodes</legend>
         <div v-for="node in graph.nodes">
@@ -430,9 +450,11 @@
                 <input type="text" v-model="value.sourceText" class="manualTextbox" @change="updateGraphAuto()" />
               </span>
               <span v-else>
-                <select2 :options="graph.nodes" v-model="value.source" @input="updateGraphAuto()"
+                <!-- ここを有効にするとエッジの各ノードが選択ボックスによって書き換えられてしまい、エッジが不正になる -->
+
+                <!-- <select2 :options="graph.nodes" v-model="value.source" @input="updateGraphAuto()"
                   class="charOptionSelect">
-                </select2>
+                </select2> -->
               </span>
             </div>
             <div style="display: inline-block; vertical-align: middle;">
@@ -464,9 +486,11 @@
                 <input type="text" v-model="value.destinationText" class="manualTextbox" @change="updateGraphAuto()" />
               </span>
               <span v-else>
-                <select2 :options="graph.nodes" v-model="value.destination" class="charOptionSelect"
+                <!-- ここを有効にするとエッジの各ノードが選択ボックスによって書き換えられてしまい、エッジが不正になる -->
+
+                <!-- <select2 :options="graph.nodes" v-model="value.destination" class="charOptionSelect"
                   @input="updateGraphAuto()">
-                </select2>
+                </select2> -->
               </span>
             </div>
             <div style="display: inline-block; vertical-align: middle;">
@@ -499,12 +523,6 @@
           </div>
         </div>
       </fieldset>
-      <input type="button" value="URL強制インポート" @click="importUrl(g_appData.debugImportUrl, 1)">
-      <br />
-      <textarea v-model="debugImportUrl" style="width: 600px;height:100px;"></textarea>
-      <br />
-      ログ:<br />
-      <textarea v-model="log" style="width: 600px;height: 300px; "></textarea>
     </div>
     <div>
       <!--キャラ画像確認用-->
@@ -556,6 +574,12 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
 
+  <!-- jquery-ui -->
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.min.css" media="print"
+    onload="this.media='all'">
+  <script async src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+
+
   <!-- select2 -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/css/select2.min.css"
     media="print" onload="this.media='all'">
@@ -577,21 +601,45 @@
   <script src="/node_modules/d3-graphviz/build/d3-graphviz.js"></script>
   <script src="/js/sql.js/dist/sql-wasm.js"></script>
 
-  <script src="/FehTools/RelationshipChartMaker/Graph.js?20240121"></script>
+  <script src="/FehTools/RelationshipChartMaker/Graph.js?20240121_1"></script>
   <script src="/FehTools/RelationshipChartMaker/Utilities.js?20231105"></script>
   <script src="/FehTools/RelationshipChartMaker/SqliteDatabase.js?20231105"></script>
   <script src="/FehTools/RelationshipChartMaker/CharacterInfo.js?20231105"></script>
-  <script src="/FehTools/RelationshipChartMaker/Main_DrawByD3.js?20240121"></script>
-  <script src="/FehTools/RelationshipChartMaker/Main.js?20240121"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main_DrawByD3.js?20240121_1"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main.js?20240121_1"></script>
   <script src="/FehTools/RelationshipChartMaker/Main_OriginalChar.js?20231105"></script>
 
   <script>
+    function createDialog(elem, title, width = 370, height = 500, positionOf) {
+      elem.dialog({
+        autoOpen: false,
+        modal: false,
+        title: title,
+        width: width,
+        height: height,
+        resizable: true,
+        closeText: "",
+        position: {
+          my: "left top",
+          at: "left top",
+          of: positionOf
+        }
+      });
+    }
+    function showSettingDialog() {
+      $('#settingDialog').dialog('open');
+    }
+
+
+
     function selectedNodeNameChanged(elem) {
       if (g_appData.selectedNode != null) {
         g_appData.updateNodeInfo(g_appData.selectedNode);
       }
     }
     window.addEventListener('load', (event) => {
+      createDialog($("#settingDialog"), "選択アイテムの設定", 270, 270, "#showDialog");
+
       $("#editSelectedEdgeLabel").keypress(function (e) {
         if (e.which === 13 && !e.shiftKey) {
           // Enter 時の挙動

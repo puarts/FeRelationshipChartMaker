@@ -1,5 +1,5 @@
 
-const ThumbRoot = "https://fire-emblem.fun/images/FehCylPortraits/";
+const ThumbRoot = "/images/FehCylPortraits/";
 
 class CharacterInfo {
     constructor(
@@ -49,7 +49,7 @@ class CharacterInfo {
     }
 
     get url() {
-        return `https://www.fire-emblem.fun/?fechar=${this.id}#main-content`;
+        return `https://fire-emblem.fun/?fechar=${this.id}#main-content`;
     }
 }
 

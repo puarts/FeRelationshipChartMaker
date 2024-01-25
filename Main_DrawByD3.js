@@ -39,6 +39,21 @@ function getEdgeLabel(d, fontSize) {
     return result;
 }
 
+/**
+ * @param  {GraphComment} d
+ * @param  {Number} fontSize
+ */
+function getCommentText(d, fontSize) {
+    // 改行に対応
+    let result = "";
+    const x = d.x;
+    for (const line of d.text.split(/\r?\n/)) {
+        result += `<tspan x='${x}' dy='${fontSize}px'>${line}</tspan>`;
+    }
+    return result;
+}
+
+
 class SvgManager {
     constructor() {
         this.svg = null;
@@ -86,18 +101,18 @@ class SvgManager {
     }
 }
 
-function createOrUpdateGroupedSvgElems(svg, newDataSet, groupId, elemName) {
+function createOrUpdateGroupedSvgElems(svg, newDataSet, groupId, elemName, keyFunc = null) {
     let group = svg.select(`#${groupId}`);
     if (group.empty()) {
         group = svg.append("g").attr("id", groupId);
     }
-    return createOrUpdateSvgElems(group, newDataSet, elemName);
+    return createOrUpdateSvgElems(group, newDataSet, elemName, keyFunc == null ? x => x.id : keyFunc);
 }
 
-function createOrUpdateSvgElems(parentElem, newDataSet, elemName) {
+function createOrUpdateSvgElems(parentElem, newDataSet, elemName, keyFunc = null) {
     const elems = parentElem
         .selectAll(elemName)
-        .data(newDataSet, d => d.id); // key関数としてd.idを使用する
+        .data(newDataSet, keyFunc); // key関数としてd.idを使用する
     elems.exit().remove();
     const newElems = elems
         .enter()
@@ -225,7 +240,7 @@ function updateGraphByD3js(
             if (e.ctrlKey) {
                 const comment = new GraphComment("コメント");
                 comment.setPos(px, py);
-                self.graph.addComment(comment);
+                self.addComment(comment);
                 self.selectSingleComment(comment);
             }
             else {
@@ -237,6 +252,7 @@ function updateGraphByD3js(
                 self.selectSingleNode(node);
             }
 
+            self.__executeAllCommands();
             self.updateGraph(graphElementId);
         });
 
@@ -383,8 +399,10 @@ function updateGraphByD3js(
     // シミュレーションが終わらないようにアルファターゲットを0.01に設定
     const simulation = d3.forceSimulation(graph.nodes).alphaTarget(0.01);
 
+    let tempSerializedGraph = null;
     const dragNodeCalls = d3.drag()
         .on("start", (e, d) => {
+            tempSerializedGraph = self.graph.toString();
             // if (!e.active) simulation.alpha(0.3).restart();
             d.fx = e.x;
             d.fy = e.y;
@@ -415,6 +433,8 @@ function updateGraphByD3js(
             //     self.toggleSelectNode(d);
             // }
 
+            self.moveNode(d, d.x, d.y, tempSerializedGraph);
+            self.__executeAllCommands();
             self.selectSingleNode(d);
         });
 
@@ -425,6 +445,7 @@ function updateGraphByD3js(
         .style("text-shadow", `${edgeLabelShadowColor} ${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px 0px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px 0px 0px`)
         .call(d3.drag()
             .on("start", (e, d) => {
+                tempSerializedGraph = self.graph.toString();
                 d.startX = e.x;
                 d.startY = e.y;
                 d.fx = e.x;
@@ -442,6 +463,8 @@ function updateGraphByD3js(
                 d.fy = null;
                 d.startX = null;
                 d.startY = null;
+                self.moveComment(d, d.x, d.y, tempSerializedGraph);
+                self.__executeAllCommands();
                 self.selectSingleComment(d);
 
                 if (!isPosChanged) {
@@ -467,13 +490,14 @@ function updateGraphByD3js(
                 }
             }));
 
-    const nodeSelectionCircles = createOrUpdateGroupedSvgElems(svg, graph.nodes, "nodeCircle", "circle")
+    const nodeKeyFunc = x => x.id;
+    const nodeSelectionCircles = createOrUpdateGroupedSvgElems(svg, graph.nodes, "nodeCircle", "circle", nodeKeyFunc)
         .attr("r", radius)
         .attr("fill", "#9df")
         .attr("stroke-width", "0")
         .call(dragNodeCalls);
 
-    const nodeFrames = createOrUpdateGroupedSvgElems(svg, graph.nodes, "imageFrames", "circle")
+    const nodeFrames = createOrUpdateGroupedSvgElems(svg, graph.nodes, "imageFrames", "circle", nodeKeyFunc)
         .attr("r", radius)
         .attr("fill", imageFrameColor)
         .attr("stroke-width", imageFrameOuterWidth)
@@ -482,7 +506,7 @@ function updateGraphByD3js(
         .call(dragNodeCalls);
 
 
-    const nodeImages = createOrUpdateGroupedSvgElems(svg, graph.nodes, imageGroupId, "image")
+    const nodeImages = createOrUpdateGroupedSvgElems(svg, graph.nodes, imageGroupId, "image", nodeKeyFunc)
         .attr("height", g_nodeSize)
         .attr("width", g_nodeSize)
         .attr("class", "selectableIcon")
@@ -507,14 +531,14 @@ function updateGraphByD3js(
             .attr("d", "M0,-5L10,0L0,5");
     }
 
-    const nodeImageClipPaths = createOrUpdateSvgElems(defs, graph.nodes, "clipPath")
+    const nodeImageClipPaths = createOrUpdateSvgElems(defs, graph.nodes, "clipPath", nodeKeyFunc)
         .attr("id", d => "circle-clip" + d.id)
         .append("circle")
         .attr("r", g_nodeSize / 2 - (imageFrameInnerWidth + imageFrameOuterWidth));
 
     const nodeLabelShadowSize = 1;
     const nodeLabelShadowColor = "#000";
-    const nodeLabels = createOrUpdateGroupedSvgElems(svg, graph.nodes, "nodeLabels", "text")
+    const nodeLabels = createOrUpdateGroupedSvgElems(svg, graph.nodes, "nodeLabels", "text", nodeKeyFunc)
         .attr("font-size", fontSize)
         .style("text-anchor", "middle")
         .attr("stroke", "white")
@@ -543,7 +567,7 @@ function updateGraphByD3js(
         })
         .call(dragEdgeEvent);
 
-    const edgeDragPoints = createOrUpdateGroupedSvgElems(svg, graph.nodes, "edgePoints", "circle")
+    const edgeDragPoints = createOrUpdateGroupedSvgElems(svg, graph.nodes, "edgePoints", "circle", nodeKeyFunc)
         .attr("fill", "#fb9")
         .attr("stroke-width", "5")
         .attr("stroke", "#e96")
@@ -600,6 +624,7 @@ function updateGraphByD3js(
                     droppedNode.isSelected = false;
                     droppedNode.mouseOver = false;
                     self.createNewEdge(d.id, droppedNode.id);
+                    self.__executeAllCommands();
                     self.updateGraph(graphElementId);
                 }
             }));
@@ -674,7 +699,8 @@ function updateGraphByD3js(
                 .text(d => d.text)
                 .attr("x", d => d.x)
                 .attr("y", d => d.y)
-                .attr("stroke", d => d.isSelected ? "#aaa" : "black");
+                .attr("stroke", d => d.isSelected ? "#aaa" : "black")
+                .html(d => getCommentText(d, fontSize));
 
             edgeLabelClickPoints
                 .attr("x", d => getEdgeLabelPositionX(d) - 50 / 2)
@@ -714,7 +740,7 @@ function updateGraphByD3js(
                 ;
 
             nodeLabels
-                .text(d => d.displayName)
+                .text(d => d.displayName + `(${d.id})`)
                 .attr("x", d => d.x)
                 .attr("y", d => getNodeLabelPositionY(d, radius));
 

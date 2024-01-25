@@ -221,6 +221,37 @@ class AppData extends SqliteDatabase {
         this.isNodeLabelEditing = false;
         this.isEdgeLabelEditing = false;
         this.isCommentEditing = false;
+
+        this.graphSettingText = "";
+
+        this.commands = new CommandQueue();
+        this.tempSerializedGraph = null;
+    }
+
+
+    __createCommand(id, label, func, serializedDataForUndo = null, commandType = CommandType.Normal, metaData = null) {
+        let serializedTurn = serializedDataForUndo ?? this.graph.toString();
+        let self = this;
+        let command = new Command(
+            id,
+            label,
+            function (input) {
+                input[1]();
+            },
+            function (input) {
+                if (input[1] != null) {
+                    self.graph.fromString(input[1]);
+                }
+            },
+            [label, func],
+            [label, serializedTurn],
+            commandType
+        );
+        return command;
+    }
+
+    get isEditingText() {
+        return this.isNodeLabelEditing || this.isEdgeLabelEditing || this.isCommentEditing;
     }
 
     createNewFilterCharacter() {
@@ -235,7 +266,7 @@ class AppData extends SqliteDatabase {
     updateTweetUrl() {
         const url = encodeURIComponent(this.exportSettingUrl);
         const text = encodeURIComponent("#FE人物相関図メーカー");
-        const originalReferer = encodeURIComponent("https://www.fire-emblem.fun/");
+        const originalReferer = encodeURIComponent("https://fire-emblem.fun/");
         const refSrc = encodeURIComponent("twsrc^tfw|twcamp^buttonembed|twterm^share|twgr^");
         const uri = "https://twitter.com/intent/tweet?"
             + "original_referer=" + originalReferer
@@ -261,9 +292,10 @@ class AppData extends SqliteDatabase {
         let i = 0;
         this.currentTitle = elems[i++];
         const graphStr = elems[i++];
-        const graph = new Graph();
-        graph.fromString(graphStr);
-        this.graph = graph;
+        this.graph.fromString(graphStr);
+        for (const node of this.graph.nodes) {
+            this.updateNodeInfo(node);
+        }
 
         // this.rankdir = elems[i++];
         // let dotSource = elems[i++];
@@ -305,20 +337,84 @@ class AppData extends SqliteDatabase {
     }
 
     clearNodes() {
-        this.graph.nodes = [];
-        this.graph.edges = [];
-        this.graph.clusters = [];
-        this.selectedNodes = [];
-        this.selectedNode = null;
-        this.selectedEdges = [];
-        this.selectedEdge = null;
-        this.selectedComments = [];
-        this.selectedComment = null;
+        const layout = this.graph.layout;
+        this.graph.clear();
+        this.graph.layout = layout;
+        this.clearSelection();
+    }
+    undoCommand() {
+        // d3.js 側で node.id で同ノード判定をしている都合、
+        // 一回クリアして 3d.js 側のノードをリセットしないと、
+        // 古いノードが残って誤動作する
+        this.clearNodes();
+        this.updateGraph(GraphElemId);
+
+        this.commands.undo();
+        this.__updateAllNodeInfos();
+        this.updateGraph(GraphElemId);
     }
 
+    redoCommand() {
+        this.clearNodes();
+        this.updateGraph(GraphElemId);
+
+        this.commands.redo();
+        this.updateGraph(GraphElemId);
+    }
     addNode(node) {
-        this.graph.addNode(node);
-        this.updateNodeInfo(node);
+        const self = this;
+        this.__enqueueCommand(`addNode-${node.id}`, () => {
+            self.graph.addNode(node);
+            self.updateNodeInfo(node);
+        });
+    }
+    addEdge(edge) {
+        const self = this;
+        this.__enqueueCommand(`addEdge-${edge.id}`, () => {
+            self.graph.addEdge(edge);
+        });
+    }
+    addComment(comment) {
+        const self = this;
+        this.__enqueueCommand(`addComment-${comment.id}`, () => {
+            self.graph.addComment(comment);
+        });
+    }
+    /**
+     * @param  {GraphNode} node
+     * @param  {} x
+     * @param  {} y
+     */
+    moveNode(node, x, y, tempSerializedGraph = null) {
+        const self = this;
+        this.__enqueueCommand(`moveNode-${node.id}`, () => {
+            node.x = x;
+            node.y = y;
+        }, tempSerializedGraph);
+    }
+
+    moveComment(comment, x, y, tempSerializedGraph = null) {
+        const self = this;
+        this.__enqueueCommand(`moveComment-${comment.id}`, () => {
+            comment.x = x;
+            comment.y = y;
+        }, tempSerializedGraph);
+    }
+
+    __saveCurrentGraphTemporary() {
+        this.tempSerializedGraph = this.graph.toString();
+    }
+    __enqueueCommand(label, func, serializedDataForUndo = null, commandType = CommandType.Normal) {
+        let command = this.__createCommand("", label, func, serializedDataForUndo, commandType);
+        this.__enqueueCommandImpl(command);
+    }
+    __enqueueCommandImpl(command) {
+        this.commands.enqueue(command);
+    }
+    __executeAllCommands() {
+        while (this.commands.length > 0) {
+            this.commands.execute();
+        }
     }
     /**
      * @param  {GraphNode} node
@@ -329,6 +425,12 @@ class AppData extends SqliteDatabase {
             node.displayName = charInfo.displayName;
             node.text = node.displayName;
             node.imagePath = charInfo.imagePath;
+        }
+    }
+
+    __updateAllNodeInfos() {
+        for (const node of this.graph.nodes) {
+            this.updateNodeInfo(node);
         }
     }
 
@@ -506,7 +608,7 @@ class AppData extends SqliteDatabase {
 
     createNewEdge(source, destination) {
         const edge = new GraphEdge(source, destination, "");
-        this.graph.edges.push(edge);
+        this.addEdge(edge);
         return edge;
     }
 
@@ -714,16 +816,10 @@ class AppData extends SqliteDatabase {
     }
 
     selectSingleNode(targetNode) {
-        this.clearEdgeSelection();
-        for (const node of this.graph.nodes.filter(x => x != targetNode)) {
-            node.isSelected = false;
-        }
+        this.clearSelection();
         this.selectedNodes = [targetNode];
-        targetNode.isSelected = true;
         this.selectedNode = targetNode;
-        this.isNodeLabelEditing = false;
-        this.isEdgeLabelEditing = false;
-        this.isCommentEditing = false;
+        targetNode.isSelected = true;
     }
 
     selectSingleComment(targetComment) {
@@ -734,13 +830,10 @@ class AppData extends SqliteDatabase {
     }
 
     selectSingleEdge(targetEdge) {
-        this.clearNodeSelection();
-        for (const edge of this.graph.edges.filter(x => x != targetEdge)) {
-            edge.isSelected = false;
-        }
+        this.clearSelection();
         this.selectedEdges = [targetEdge];
-        targetEdge.isSelected = true;
         this.selectedEdge = targetEdge;
+        targetEdge.isSelected = true;
     }
 
 
@@ -1199,7 +1292,6 @@ function updateGraphWithoutClearLog() {
 }
 
 
-
 function svg2imageData(svgElement, successCallback, errorCallback) {
     let canvas = document.createElement('canvas');
     canvas.width = svgElement.width.baseVal.value;
@@ -1224,7 +1316,7 @@ function svg2imageData(svgElement, successCallback, errorCallback) {
     });
 }
 
-const BaseUrl = "https://www.fire-emblem.fun/?pid=1779";
+const BaseUrl = "https://fire-emblem.fun/?pid=1779";
 
 function updateUrl() {
     g_appData.writeLogLine(`■URLの更新`);
@@ -1262,7 +1354,7 @@ function importUrl(url, edgeInitDelay = 0) {
     let decompressed = LZString.decompressFromEncodedURIComponent(settingText);
     g_appData.writeLogLine("decompressed:" + decompressed);
     g_isUpdateGraphEnabled = false;
-    g_appData.fromString(decompressed, edgeInitDelay);
+    importGraph(decompressed);
     g_isUpdateGraphEnabled = true;
 
     // バインドされているので自動で更新されるが、
@@ -1270,9 +1362,29 @@ function importUrl(url, edgeInitDelay = 0) {
     updateGraphWithoutClearLog();
 }
 
+function importGraph(source) {
+    // 一回クリアしてグラフを更新しないと、d3.js の層で同IDのノードが残ってしまう。
+    // 古いノードの id と、インポート後の新しいノードの id が同じで、かつ、
+    // d3.js の層で指定してるキー関数で id を指定しているため、古いノードが消えずに残る。
+    g_appData.clearNodes();
+    updateGraphWithoutClearLog();
+
+    g_appData.fromString(source);
+    updateGraphWithoutClearLog();
+}
+
+function exportGraph() {
+    const compressed = LZString.compressToEncodedURIComponent(g_appData.toString())
+    g_appData.graphSettingText = compressed;
+}
+
+
 document.addEventListener("keydown", function (event) {
-    if (event.key === "Delete") {
+    if (event.key === "Delete" && !g_appData.isEditingText) {
         g_appData.removeSelectedItems();
         updateGraph();
+    }
+    else if (event.ctrlKey && event.key === 'z') {
+        g_appData.undoCommand();
     }
 });

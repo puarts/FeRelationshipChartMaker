@@ -129,3 +129,208 @@ function getOriginalCharacterImageNameFromEnglishName(
 
     return filePathNormal;
 }
+
+
+/// スタックを表すコンテナクラスです。
+class Stack {
+    constructor(maxLength) {
+        this._maxLength = maxLength;
+        this._array = [];
+    }
+
+    get length() {
+        return this._array.length;
+    }
+
+    push(value) {
+        if (this._array.length == this._maxLength) {
+            this._array.shift();
+        }
+        this._array.push(value);
+    }
+
+    pop() {
+        return this._array.pop();
+    }
+
+    clear() {
+        this._array = [];
+    }
+
+    get data() {
+        return this._array;
+    }
+}
+
+/// キューを表すコンテナクラスです。
+class Queue {
+    constructor(maxLength) {
+        this._maxLength = maxLength;
+        this._array = [];
+    }
+
+    enqueue(value) {
+        if (this._array.length == this._maxLength) {
+            this._array.shift();
+        }
+        this._array.push(value);
+    }
+
+    dequeue() {
+        if (this._array.length > 0) {
+            return this._array.shift();
+        }
+        return null;
+    }
+
+    pop() {
+        if (this._array.length > 0) {
+            return this._array.pop();
+        }
+        return null;
+    }
+
+    clear() {
+        this._array = [];
+    }
+
+    get topValue() {
+        if (this.length == 0) {
+            return null;
+        }
+        return this._array[0];
+    }
+
+    get lastValue() {
+        if (this.length == 0) {
+            return null;
+        }
+
+        return this._array[this._array.length - 1];
+    }
+
+
+    get length() {
+        return this._array.length;
+    }
+
+    get data() {
+        return this._array;
+    }
+}
+
+const CommandType = {
+    Normal: 0,
+    Begin: 1,
+    End: 2,
+};
+
+/// Undo、Redoが可能なコマンドです。
+class Command {
+    constructor(id, label, doFunc, undoFunc, doUserData = null, undoUserData = null, type = CommandType.Normal) {
+        this.id = id;
+        this.label = label;
+        this.doFunc = doFunc;
+        this.undoFunc = undoFunc;
+        this.doUserData = doUserData;
+        this.undoUserData = undoUserData;
+        this.type = type;
+        this.metaData = null;
+    }
+
+    execute() {
+        this.doFunc(this.doUserData);
+    }
+
+    undo() {
+        this.undoFunc(this.undoUserData);
+    }
+}
+
+/// Command の履歴を管理するクラスです。
+class CommandQueue {
+    constructor() {
+        this.queue = new Queue(100);
+        this.redoStack = new Stack(100);
+        this.undoStack = new Stack(100);
+    }
+
+    get length() {
+        return this.queue.length;
+    }
+
+    get isUndoable() {
+        return this.undoStack.length > 0;
+    }
+
+    get isRedoable() {
+        return this.redoStack.length > 0;
+    }
+
+    clear() {
+        this.queue.clear();
+        this.redoStack.clear();
+        this.undoStack.clear();
+    }
+
+    enqueue(command) {
+        this.queue.enqueue(command);
+    }
+
+    execute() {
+        let command = this.queue.dequeue();
+        if (command == null) {
+            return;
+        }
+        command.execute();
+        this.redoStack.clear();
+        this.undoStack.push(command);
+    }
+
+    executeAll() {
+        while (this.queue.length > 0) {
+            this.execute();
+        }
+    }
+
+    undoAll() {
+        let undoCount = this.undoStack.length;
+        for (let i = 0; i < undoCount; ++i) {
+            this.undo();
+        }
+    }
+
+    undo() {
+        this.__undoRedoImpl(
+            function (command) { command.undo(); },
+            this.undoStack, this.redoStack,
+            CommandType.End, CommandType.Begin);
+    }
+
+    redo() {
+        this.__undoRedoImpl(
+            function (command) { command.execute(); },
+            this.redoStack, this.undoStack,
+            CommandType.Begin, CommandType.End);
+    }
+
+    __undoRedoImpl(execFunc, sourceStack, destStack, beginCommand, endCommand) {
+        let command = sourceStack.pop();
+        if (command == null) {
+            return;
+        }
+
+        execFunc(command);
+        destStack.push(command);
+        if (command.type == beginCommand) {
+            do {
+                command = sourceStack.pop();
+                if (command == null) {
+                    return;
+                }
+                execFunc(command);
+                destStack.push(command);
+            } while (command.type != endCommand);
+        }
+    }
+}

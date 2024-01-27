@@ -107,6 +107,12 @@ const ClusterIdOffset = 10000;
 
 let g_isUpdateGraphEnabled = true;
 
+const EditMode = {
+    Normal: 0,
+    Comment: 1,
+    Cluster: 2,
+};
+
 class AppData extends SqliteDatabase {
     constructor() {
         super();
@@ -116,9 +122,6 @@ class AppData extends SqliteDatabase {
 
         /** @type {Object.<string, CharacterInfo} */
         this.characters = {};
-
-        /** @type {GraphCluster[]} */
-        this.clusters = [];
 
         /** 編集用のグラフ @type {Graph} */
         this.graph = new Graph();
@@ -206,6 +209,9 @@ class AppData extends SqliteDatabase {
         /** @type {GraphEdge[]} */
         this.selectedEdges = [];
 
+        /** @type {GraphCluster[]} */
+        this.selectedClusters = [];
+
         /** @type {GraphComment[]} */
         this.selectedComments = [];
 
@@ -215,12 +221,16 @@ class AppData extends SqliteDatabase {
         /** @type {GraphEdge} */
         this.selectedEdge = null;
 
+        /** @type {GraphCluster} */
+        this.selectedCluster = null;
+
         /** @type {GraphComment} */
         this.selectedComment = null;
 
         this.isNodeLabelEditing = false;
         this.isEdgeLabelEditing = false;
         this.isCommentEditing = false;
+        this.isClusterLabelEditing = false;
 
         this.graphSettingText = "";
 
@@ -251,7 +261,7 @@ class AppData extends SqliteDatabase {
     }
 
     get isEditingText() {
-        return this.isNodeLabelEditing || this.isEdgeLabelEditing || this.isCommentEditing;
+        return this.isNodeLabelEditing || this.isEdgeLabelEditing || this.isCommentEditing || this.isClusterLabelEditing;
     }
 
     createNewFilterCharacter() {
@@ -333,7 +343,6 @@ class AppData extends SqliteDatabase {
 
     clear() {
         this.graph.clear();
-        this.clusters = [];
     }
 
     clearNodes() {
@@ -364,9 +373,12 @@ class AppData extends SqliteDatabase {
     addNode(node) {
         const self = this;
         this.__enqueueCommand(`addNode-${node.id}`, () => {
-            self.graph.addNode(node);
-            self.updateNodeInfo(node);
+            self.__addNode(node);
         });
+    }
+    __addNode(node) {
+        this.graph.addNode(node);
+        this.updateNodeInfo(node);
     }
     addEdge(edge) {
         const self = this;
@@ -380,25 +392,80 @@ class AppData extends SqliteDatabase {
             self.graph.addComment(comment);
         });
     }
+
+    /**
+     * @param  {GraphCluster} cluster
+     * @param  {GraphNode[]} nodes
+     */
+    addCluster(cluster, nodes) {
+        this.__enqueueCommand(`addCluster-${cluster.id}`, () => {
+            // 既にどこかのクラスターに所属していたら、そこから削除
+            for (const node of nodes) {
+                if (node.clusterName != "") {
+                    const oldCluster = this.graph.clusters.find(x => x.name == node.clusterName);
+                    if (oldCluster != null) {
+                        oldCluster.removeNode(node);
+                    }
+                }
+                node.clusterName = "";
+            }
+            this.graph.addCluster(cluster, nodes);
+        });
+    }
+
     /**
      * @param  {GraphNode} node
      * @param  {} x
      * @param  {} y
      */
     moveNode(node, x, y, tempSerializedGraph = null) {
-        const self = this;
         this.__enqueueCommand(`moveNode-${node.id}`, () => {
             node.x = x;
             node.y = y;
+            this.graph.updateClusterTransform();
         }, tempSerializedGraph);
     }
 
     moveComment(comment, x, y, tempSerializedGraph = null) {
-        const self = this;
         this.__enqueueCommand(`moveComment-${comment.id}`, () => {
             comment.x = x;
             comment.y = y;
         }, tempSerializedGraph);
+    }
+    beginEditClusterLabel(cluster) {
+        this.isClusterLabelEditing = true;
+        this.__saveCurrentGraphTemporary();
+    }
+    endEditClusterLabel(cluster) {
+        this.__enqueueCommand(`editCluster-${cluster.id}`, () => {
+            cluster.label = cluster.label;
+        }, this.tempSerializedGraph);
+        this.__executeAllCommands();
+    }
+    beginEditEdgeLabel(edge) {
+        this.isEdgeLabelEditing = true;
+        this.__saveCurrentGraphTemporary();
+    }
+
+    endEditEdgeLabel(edge) {
+        this.__enqueueCommand(`editEdge-${edge.id}`, () => {
+            edge.label = edge.label;
+        }, this.tempSerializedGraph);
+        this.__executeAllCommands();
+    }
+    beginEditComment(comment) {
+        this.isCommentEditing = true;
+        this.__saveCurrentGraphTemporary();
+    }
+
+    endEditComment(comment) {
+        this.__enqueueCommand(`editComment-${comment.id}`, () => {
+            comment.text = comment.text;
+            if (comment.text == "") {
+                this.graph.removeComment(comment);
+            }
+        }, this.tempSerializedGraph);
+        this.__executeAllCommands();
     }
 
     __saveCurrentGraphTemporary() {
@@ -623,6 +690,13 @@ class AppData extends SqliteDatabase {
         edge.swapSourceAndDestination();
     }
 
+    createCluster(label) {
+        let cluster = new GraphCluster(
+            this.__getClusterId(),
+            label);
+        return cluster;
+    }
+
     createNewCluster() {
         let cluster = new GraphCluster(
             this.__getClusterId(),
@@ -633,7 +707,7 @@ class AppData extends SqliteDatabase {
     }
 
     __addNewCluster(cluster) {
-        this.clusters.push(cluster);
+        this.graph.clusters.push(cluster);
         this.__addClusterToOptions(cluster);
     }
 
@@ -654,7 +728,7 @@ class AppData extends SqliteDatabase {
                 category.name);
             cluster.color = colors[index % colors.length];
             ++index;
-            this.clusters.push(cluster);
+            this.graph.clusters.push(cluster);
 
             for (let charInfo of Object.values(this.characters)) {
                 if (charInfo.tags.some(x => x == category.name)) {
@@ -667,7 +741,7 @@ class AppData extends SqliteDatabase {
     }
 
     // setClusterNodeFromTags() {
-    //     for (let cluster of this.clusters) {
+    //     for (let cluster of this.graph.clusters) {
     //         for (let charInfo of Object.values(this.characters)) {
     //             if (charInfo.tags.some(x => x == cluster.name)) {
     //                 cluster.belongingNodes.push(new GraphNode(charInfo.id));
@@ -716,8 +790,8 @@ class AppData extends SqliteDatabase {
         }
     }
     removeCluster(cluster) {
-        let index = this.clusters.indexOf(cluster);
-        this.clusters.splice(index, 1);
+        let index = this.graph.clusters.indexOf(cluster);
+        this.graph.clusters.splice(index, 1);
         this.__removeClusterFromOptions(cluster);
     }
 
@@ -750,7 +824,7 @@ class AppData extends SqliteDatabase {
     }
 
     __getClusterId() {
-        let id = ClusterIdOffset + this.clusters.length;
+        let id = ClusterIdOffset + this.graph.clusters.length;
         while (this.__hasSameIdCluster(id)) {
             ++id;
         }
@@ -758,7 +832,7 @@ class AppData extends SqliteDatabase {
     }
 
     __getClusterDefaultName() {
-        let index = this.clusters.length;
+        let index = this.graph.clusters.length;
         let name = `グループ${index}`;
         while (this.__hasSameNameCluster(name)) {
             name = `グループ${++index}`;
@@ -767,7 +841,7 @@ class AppData extends SqliteDatabase {
     }
 
     __hasSameNameCluster(name) {
-        for (let cluster of this.clusters) {
+        for (let cluster of this.graph.clusters) {
             if (cluster.name == name) {
                 return true;
             }
@@ -776,7 +850,7 @@ class AppData extends SqliteDatabase {
     }
 
     __hasSameIdCluster(id) {
-        for (let cluster of this.clusters) {
+        for (let cluster of this.graph.clusters) {
             if (cluster.id == id) {
                 return true;
             }
@@ -793,31 +867,57 @@ class AppData extends SqliteDatabase {
         this.isNodeLabelEditing = false;
     }
     clearEdgeSelection() {
+        if (this.isEdgeLabelEditing) {
+            this.endEditEdgeLabel(this.selectedEdge);
+            this.isEdgeLabelEditing = false;
+        }
+
         this.selectedEdges = [];
         this.selectedEdge = null;
         for (const n of this.graph.edges) {
             n.isSelected = false;
         }
-        this.isEdgeLabelEditing = false;
+    }
+    clearClusterSelection() {
+        if (this.isClusterLabelEditing) {
+            this.endEditClusterLabel(this.selectedCluster);
+            this.isClusterLabelEditing = false;
+        }
+
+        this.selectedClusters = [];
+        this.selectedCluster = null;
+        for (const n of this.graph.clusters) {
+            n.isSelected = false;
+        }
     }
     clearCommentSelection() {
+        if (this.isCommentEditing) {
+            this.endEditComment(this.selectedComment);
+            this.isCommentEditing = false;
+        }
+
         this.selectedComments = [];
         this.selectedComment = null;
         for (const n of this.graph.comments) {
             n.isSelected = false;
         }
-        this.isCommentEditing = false;
-
     }
     clearSelection() {
         this.clearNodeSelection();
         this.clearEdgeSelection();
+        this.clearClusterSelection();
         this.clearCommentSelection();
     }
 
     selectSingleNode(targetNode) {
         this.clearSelection();
-        this.selectedNodes = [targetNode];
+        this.selectAddNode(targetNode);
+    }
+    selectAddNode(targetNode) {
+        if (this.selectedNodes.some(x => x == targetNode)) {
+            return;
+        }
+        this.selectedNodes.push(targetNode);
         this.selectedNode = targetNode;
         targetNode.isSelected = true;
     }
@@ -835,6 +935,12 @@ class AppData extends SqliteDatabase {
         this.selectedEdge = targetEdge;
         targetEdge.isSelected = true;
     }
+    selectSingleCluster(targetCluster) {
+        this.clearSelection();
+        this.selectedClusters = [targetCluster];
+        this.selectedCluster = targetCluster;
+        targetCluster.isSelected = true;
+    }
 
 
     toggleSelectNode(targetNode) {
@@ -843,6 +949,25 @@ class AppData extends SqliteDatabase {
         }
         targetNode.isSelected = !targetNode.isSelected;
         this.selectedNodes = targetNode.isSelected ? [targetNode] : [];
+    }
+
+    groupSelectedNodes() {
+        let clusteredNode = this.selectedNodes.find(x => x.clusterName != "");
+        let clusterName = clusteredNode != null ? clusteredNode.clusterName : null;
+        let cluster = null;
+        if (clusterName == null) {
+            cluster = this.createCluster("新規グループ");
+            clusterName = cluster.name;
+        }
+        else {
+            cluster = this.graph.clusters.find(x => x.name == clusterName);
+            if (cluster == null) {
+                throw new Error(`cluster was not found. "${clusterName}"`);
+            }
+        }
+
+        this.addCluster(cluster, this.selectedNodes);
+        this.__executeAllCommands();
     }
 
     writeError(message) {
@@ -886,7 +1011,7 @@ class AppData extends SqliteDatabase {
         else {
             const idToCharInfoDict = {};
             if (this.showsCluster) {
-                for (let cluster of this.clusters) {
+                for (let cluster of this.graph.clusters) {
                     for (let node of cluster.belongingNodes) {
                         let charId = node.name;
                         if (charId != NoneValue) {
@@ -947,7 +1072,7 @@ class AppData extends SqliteDatabase {
      * @param  {GraphNode} node
      */
     getClusterName(node) {
-        for (let cluster of this.clusters) {
+        for (let cluster of this.graph.clusters) {
             for (let clusterNode of cluster.belongingNodes) {
                 if (clusterNode.name == node.name) {
                     return cluster.name;
@@ -1079,7 +1204,7 @@ class AppData extends SqliteDatabase {
         }
 
         if (this.showsCluster) {
-            displayGraph.clusters = Array.from(this.clusters.filter(x => x.belongingNodes.length > 0));
+            displayGraph.clusters = Array.from(this.graph.clusters.filter(x => x.belongingNodes.length > 0));
         }
 
         return displayGraph;
@@ -1386,5 +1511,9 @@ document.addEventListener("keydown", function (event) {
     }
     else if (event.ctrlKey && event.key === 'z') {
         g_appData.undoCommand();
+    }
+    else if (event.ctrlKey && event.key === 'g') {
+        g_appData.groupSelectedNodes();
+        g_appData.updateGraph(GraphElemId);
     }
 });

@@ -25,6 +25,8 @@ class GraphNode {
 
         // select2用
         this.text = displayName;
+
+        this.radius = 50;
     }
 
     get isClustered() {
@@ -267,20 +269,168 @@ class GraphEdge {
     }
 }
 
+
+function darkenColor(hex, percent) {
+    // 入力された16進数の色コードをRGBの値に変換する
+    let r = parseInt(hex.substring(1, 3), 16);
+    let g = parseInt(hex.substring(3, 5), 16);
+    let b = parseInt(hex.substring(5, 7), 16);
+
+    // 暗くする割合を計算する
+    let darkenAmount = 1 - percent / 100;
+
+    // RGBの値を暗くする
+    r = Math.floor(r * darkenAmount);
+    g = Math.floor(g * darkenAmount);
+    b = Math.floor(b * darkenAmount);
+
+    // RGBの値を16進数の文字列に変換する
+    r = (r < 16 ? '0' : '') + r.toString(16);
+    g = (g < 16 ? '0' : '') + g.toString(16);
+    b = (b < 16 ? '0' : '') + b.toString(16);
+
+    // 新しい色を返す
+    return `#${r}${g}${b}`;
+}
+
+function increaseSaturation(hexColor, factor) {
+    const rgb = hexToRgb(hexColor);
+    const hsv = rgbToHsv(rgb);
+    const s = hsv[1];
+    hsv[1] = Math.min(1, s * factor);
+    const newRgb = hsvToRgb(hsv);
+    const newHex = rgbToHex(newRgb);
+    return newHex;
+}
+
+function hexToRgb(hex) {
+    let r = parseInt(hex.substring(1, 3), 16);
+    let g = parseInt(hex.substring(3, 5), 16);
+    let b = parseInt(hex.substring(5, 7), 16);
+    return [r, g, b];
+}
+
+function rgbToHex(color) {
+    let r = color[0];
+    let g = color[1];
+    let b = color[2];
+    r = (r < 16 ? '0' : '') + r.toString(16);
+    g = (g < 16 ? '0' : '') + g.toString(16);
+    b = (b < 16 ? '0' : '') + b.toString(16);
+
+    // 新しい色を返す
+    return `#${r}${g}${b}`;
+}
+function rgbToHsv(color) {
+    let r = color[0] / 255;
+    let g = color[1] / 255;
+    let b = color[2] / 255;
+
+    let max = Math.max(r, g, b);
+    let min = Math.min(r, g, b);
+    let h, s, v = max;
+
+    let d = max - min;
+    s = max === 0 ? 0 : d / max;
+
+    if (max === min) {
+        h = 0; // achromatic
+    } else {
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+
+    return [h, s, v];
+}
+
+function hsvToRgb(hsv) {
+    let h = hsv[0];
+    let s = hsv[1];
+    let v = hsv[2];
+
+    let i = Math.floor(h * 6);
+    let f = h * 6 - i;
+    let p = v * (1 - s);
+    let q = v * (1 - f * s);
+    let t = v * (1 - (1 - f) * s);
+
+    let mod = i % 6;
+    let r = Math.floor([v, q, p, p, t, v][mod] * 255);
+    let g = Math.floor([t, v, v, q, p, p][mod] * 255);
+    let b = Math.floor([p, p, t, v, v, q][mod] * 255);
+
+    return [r, g, b];
+}
+
+
 const ArrayElemDelim = "|,";
 class GraphCluster {
     constructor(name, label) {
-        this.name = name;
+        this.name = String(name);
         /** @type {string} */
         this.label = label;
-        this.color = "#ddffcc";
+        this.color = "#eeeeff";
+
         /** @type {GraphNode[]} */
         this.belongingNodes = [];
+
+        this.isSelected = false;
+
+        // 描画用に設定するためのプロパティ(保存の必要なし)
+        this.x = 0;
+        this.y = 0;
+        this.width = 1;
+        this.height = 1;
+        this.paddingTop = 10;
+        this.paddingLeft = 10;
+        this.paddingRight = 10;
+        this.paddingBottom = 30;
+        this.labelColor = "#fff";
+        this.labelShadowColor = "#000";
+
+        this.setColor(this.color);
+    }
+
+    setColor(color) {
+        this.color = color;
+        this.labelColor = increaseSaturation(this.color, 4);
+        this.labelShadowColor = darkenColor(this.labelColor, 50);
+    }
+
+    get id() {
+        return this.name;
     }
 
     get subgraphName() {
         // dot言語の中ではclusterプレフィックスが必要
         return "cluster" + this.name;
+    }
+    /**
+     * @param  {GraphNode[]} nodes
+     */
+    addNodes(nodes) {
+        for (const node of nodes) {
+            node.clusterName = this.name;
+            this.belongingNodes.push(node);
+        }
+        this.transformByBelongingNodes();
+    }
+
+    removeNode(node) {
+        let index = this.belongingNodes.indexOf(node);
+        this.belongingNodes.splice(index, 1);
+    }
+
+    clearBelongingNodes() {
+        for (const node of this.belongingNodes) {
+            node.clusterName = "";
+        }
+        this.belongingNodes = [];
+        this.transformByBelongingNodes();
     }
 
     /**
@@ -317,6 +467,24 @@ class GraphCluster {
         }
         result = result.substring(0, result.length - ArrayElemDelim.length);
         return result;
+    }
+
+    transformByBelongingNodes() {
+        let minPosX = 10000;
+        let minPosY = 10000;
+        let maxPosX = -10000;
+        let maxPosY = -10000;
+        for (const node of this.belongingNodes) {
+            minPosX = Math.min(node.x - node.radius, minPosX);
+            minPosY = Math.min(node.y - node.radius, minPosY);
+            maxPosX = Math.max(node.x + node.radius, maxPosX);
+            maxPosY = Math.max(node.y + node.radius, maxPosY);
+        }
+
+        this.x = minPosX - this.paddingLeft;
+        this.y = minPosY - this.paddingTop;
+        this.width = maxPosX - minPosX + this.paddingLeft + this.paddingRight;
+        this.height = maxPosY - minPosY + this.paddingTop + this.paddingBottom;
     }
 }
 
@@ -470,6 +638,24 @@ class Graph {
         this.comments.push(comment);
     }
 
+    /**
+     * @param  {GraphCluster} cluster
+     * @param  {GraphNode[]} nodes
+     */
+    addCluster(cluster, nodes) {
+        if (!this.clusters.includes(cluster)) {
+            this.clusters.push(cluster);
+        }
+
+        for (const node of nodes) {
+            if (!this.nodes.includes(node)) {
+                throw new Error(`${node.name} is not added to graph`);
+            }
+        }
+
+        cluster.addNodes(nodes);
+    }
+
     removeNode(node) {
         this.nodes.splice(this.nodes.indexOf(node), 1);
         delete this.idToNodes[node.id];
@@ -501,6 +687,12 @@ class Graph {
         for (let node of this.nodes) {
             this.idToNodes[node.id] = node;
             this.nameToNodes[node.name] = node;
+        }
+    }
+
+    updateClusterTransform() {
+        for (const cluster of this.clusters) {
+            cluster.transformByBelongingNodes();
         }
     }
 

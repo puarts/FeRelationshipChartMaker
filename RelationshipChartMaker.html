@@ -179,6 +179,12 @@
         <textarea id="editSelectedEdgeLabel" v-model="(selectedEdge || {}).label" @change="g_appData.clearSelection();"
           style="position: absolute;top: 0;left: 0;" v-show="isEdgeLabelEditing"></textarea>
 
+        <!--選択エッジの編集UI-->
+        <textarea id="editSelectedClusterLabel" v-model="(selectedCluster || {}).label"
+          @change="g_appData.clearSelection();" style="position: absolute;top: 0;left: 0;"
+          v-show="isClusterLabelEditing"></textarea>
+
+
         <!--選択ノードの編集UI-->
         <div id="editSelectedNodeLabel" v-show="isNodeLabelEditing" style="position: absolute;top: 0;left: 0;">
           <select2 :options="titleToCharOptions[currentTitle]" v-model="(selectedNode || {}).name"
@@ -400,6 +406,9 @@
             <div>
               imagePath={{node.imagePath}}
             </div>
+            <div>
+              isSelected={{node.isSelected}}
+            </div>
           </div>
         </div>
       </fieldset>
@@ -601,13 +610,13 @@
   <script src="/node_modules/d3-graphviz/build/d3-graphviz.js"></script>
   <script src="/js/sql.js/dist/sql-wasm.js"></script>
 
-  <script src="/FehTools/RelationshipChartMaker/Graph.js?20240121_1"></script>
-  <script src="/FehTools/RelationshipChartMaker/Utilities.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/Graph.js?20240128"></script>
+  <script src="/FehTools/RelationshipChartMaker/Utilities.js?20240128"></script>
   <script src="/FehTools/RelationshipChartMaker/SqliteDatabase.js?20231105"></script>
-  <script src="/FehTools/RelationshipChartMaker/CharacterInfo.js?20231105"></script>
-  <script src="/FehTools/RelationshipChartMaker/Main_DrawByD3.js?20240121_1"></script>
-  <script src="/FehTools/RelationshipChartMaker/Main.js?20240121_1"></script>
-  <script src="/FehTools/RelationshipChartMaker/Main_OriginalChar.js?20231105"></script>
+  <script src="/FehTools/RelationshipChartMaker/CharacterInfo.js?20240128"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main_DrawByD3.js?20240128"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main.js?20240128"></script>
+  <script src="/FehTools/RelationshipChartMaker/Main_OriginalChar.js?20240128"></script>
 
   <script>
     function createDialog(elem, title, width = 370, height = 500, positionOf) {

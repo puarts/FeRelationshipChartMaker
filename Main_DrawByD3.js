@@ -13,6 +13,7 @@ function getEdgeLabelPositionX(d) {
     if (d == null || d.sourceNode == null || d.destinationNode == null) return 0;
     return (d.sourceNode.x + d.destinationNode.x) / 2 + d.labelOffsetX;
 }
+
 /**
  * @param  {GraphEdge} d
  */
@@ -20,6 +21,15 @@ function getEdgeLabelPositionY(d, fontSize) {
     if (d == null || d.sourceNode == null || d.destinationNode == null) return 0;
     const lineBreakCount = countNewlines(d.label);
     return (d.sourceNode.y + d.destinationNode.y) / 2 + d.labelOffsetY - fontSize - (lineBreakCount * fontSize) / 2;
+}
+
+function getClusterLabelPositionX(d) {
+    return d.x + (d.width + d.paddingLeft + d.paddingRight) / 2;
+}
+
+function getClusterLabelPositionY(d, fontSize) {
+    const lineBreakCount = countNewlines(d.label);
+    return d.y + d.height - d.paddingBottom + fontSize / 2;
 }
 
 function getNodeLabelPositionY(d, radius) {
@@ -33,6 +43,19 @@ function getEdgeLabel(d, fontSize) {
     // 改行に対応
     let result = "";
     const x = getEdgeLabelPositionX(d);
+    for (const line of d.label.split(/\r?\n/)) {
+        result += `<tspan x='${x}' dy='${fontSize}px'>${line}</tspan>`;
+    }
+    return result;
+}
+/**
+ * @param  {GraphCluster} d
+ * @param  {Number} fontSize
+ */
+function getClusterLabel(d, fontSize) {
+    // 改行に対応
+    let result = "";
+    const x = getClusterLabelPositionX(d);
     for (const line of d.label.split(/\r?\n/)) {
         result += `<tspan x='${x}' dy='${fontSize}px'>${line}</tspan>`;
     }
@@ -120,6 +143,9 @@ function createOrUpdateSvgElems(parentElem, newDataSet, elemName, keyFunc = null
     return newElems;
 }
 
+function getTextShadowStyle(shadowColor, shadowSize) {
+    return `${shadowColor} ${shadowSize}px ${shadowSize}px 0px, ${shadowColor} -${shadowSize}px ${shadowSize}px 0px, ${shadowColor} ${shadowSize}px -${shadowSize}px 0px, ${shadowColor} -${shadowSize}px -${shadowSize}px 0px, ${shadowColor} 0px ${shadowSize}px 0px, ${shadowColor} 0px -${shadowSize}px 0px, ${shadowColor} -${shadowSize}px 0px 0px, ${shadowColor} ${shadowSize}px 0px 0px`;
+}
 
 class PreviewLink {
     constructor() {
@@ -301,6 +327,46 @@ function updateGraphByD3js(
         }
     }
 
+    const edgeLabelShadowSize = 1;
+    const edgeLabelShadowColor = "#fff";
+    const clusterLabelShadowColor = "#333";
+    const clusters =
+        createOrUpdateGroupedSvgElems(svg, graph.clusters, "clusters", "rect")
+            .attr("stroke-width", "1")
+            .style("fill-opacity", "0.3");
+
+    const clusterLabels = createOrUpdateGroupedSvgElems(svg, graph.clusters, "clusterLabels", "text")
+        .attr("font-size", fontSize)
+        .style("text-anchor", "middle")
+        .call(d3.drag()
+            .on("start", (e, d) => {
+            })
+            .on("drag", (e, d) => {
+            })
+            .on("end", (e, d) => {
+                if (d != null) {
+                    self.selectSingleCluster(d);
+                    self.beginEditClusterLabel(d);
+                    // ビューからスケール計算(DOM構築後じゃないと計算できないので、ここで計算)
+                    const sizeScale = self.svgManager.calcVirtualToPhysicalViewBoxScale();
+
+                    // ビューに依存してしまってるのをどうにかしたい
+                    const editControl = document.getElementById("editSelectedClusterLabel");
+                    const controlWidth = 170;
+                    const viewBoxMinScale = (svg.node().clientWidth / viewBoxWidth);
+                    const px = (getClusterLabelPositionX(d) * sizeScale - controlWidth * 0.5) - self.svgManager.viewBoxMinX * viewBoxMinScale;;
+                    const py = getClusterLabelPositionY(d, fontSize) * sizeScale - self.svgManager.viewBoxMinY * viewBoxMinScale;
+                    editControl.style.left = `${px}px`;
+                    editControl.style.top = `${py}px`;
+
+                    // visibilityがビューに反映されるまでラグがあるので、
+                    // 少し後にテキストボックスにフォーカスする
+                    // 本当はDOMの更新が確実に終わってからフォーカスするようにした方がいい
+                    setTimeout(() => editControl.focus(), 100);
+                }
+            }));
+
+
     let previewLinks = svg.select(`#prevEdges`).selectAll("line");
     if (previewLinks.empty()) {
         previewLinks = svg.append("g").attr("id", "prevEdges")
@@ -320,9 +386,9 @@ function updateGraphByD3js(
         .on("drag", (e, d) => {
         })
         .on("end", (e, d) => {
-            self.selectSingleEdge(d);
-            self.isEdgeLabelEditing = true;
             if (d != null) {
+                self.selectSingleEdge(d);
+                self.beginEditEdgeLabel(d);
                 // ビューからスケール計算(DOM構築後じゃないと計算できないので、ここで計算)
                 const sizeScale = self.svgManager.calcVirtualToPhysicalViewBoxScale();
 
@@ -384,8 +450,7 @@ function updateGraphByD3js(
                     self.selectSingleEdge(d);
                 }));
 
-    const edgeLabelShadowSize = 1;
-    const edgeLabelShadowColor = "#fff";
+
     const edgeLabels = createOrUpdateGroupedSvgElems(svg, graph.edges, "edgeLabels", "text")
         .attr("font-size", fontSize)
         .style("text-anchor", "middle")
@@ -401,9 +466,15 @@ function updateGraphByD3js(
 
     let tempSerializedGraph = null;
     const dragNodeCalls = d3.drag()
+        .filter(function () {
+            // デフォルトだとCtrlキーが押されてると無視されるので、その挙動を無効化
+            return true;
+        })
         .on("start", (e, d) => {
             tempSerializedGraph = self.graph.toString();
             // if (!e.active) simulation.alpha(0.3).restart();
+            d.startX = e.x;
+            d.startY = e.y;
             d.fx = e.x;
             d.fy = e.y;
             // d.dragStartPosX = e.x;
@@ -423,6 +494,9 @@ function updateGraphByD3js(
         })
         .on("end", (e, d) => {
             // if (!e.active) simulation.alphaTarget(0);
+            const isPosChanged = d.x != d.startX || d.y != d.startY;
+            d.startX = null;
+            d.startY = null;
 
             d.fx = null;
             d.fy = null;
@@ -433,62 +507,19 @@ function updateGraphByD3js(
             //     self.toggleSelectNode(d);
             // }
 
-            self.moveNode(d, d.x, d.y, tempSerializedGraph);
-            self.__executeAllCommands();
-            self.selectSingleNode(d);
+            if (e.sourceEvent.ctrlKey || e.sourceEvent.shiftKey) {
+                self.selectAddNode(d);
+            }
+            else {
+                self.selectSingleNode(d);
+            }
+            if (isPosChanged) {
+                self.moveNode(d, d.x, d.y, tempSerializedGraph);
+                self.__executeAllCommands();
+            }
+            self.updateGraph(graphElementId);
         });
 
-    const comments = createOrUpdateGroupedSvgElems(svg, graph.comments, "comments", "text")
-        .attr("font-size", fontSize)
-        .style("text-anchor", "middle")
-        .attr("stroke", "black")
-        .style("text-shadow", `${edgeLabelShadowColor} ${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px 0px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px 0px 0px`)
-        .call(d3.drag()
-            .on("start", (e, d) => {
-                tempSerializedGraph = self.graph.toString();
-                d.startX = e.x;
-                d.startY = e.y;
-                d.fx = e.x;
-                d.fy = e.y;
-            })
-            .on("drag", (e, d) => {
-                d.fx = e.x;
-                d.fy = e.y;
-                d.x = d.fx;
-                d.y = d.fy;
-            })
-            .on("end", (e, d) => {
-                const isPosChanged = d.x != d.startX || d.y != d.startY;
-                d.fx = null;
-                d.fy = null;
-                d.startX = null;
-                d.startY = null;
-                self.moveComment(d, d.x, d.y, tempSerializedGraph);
-                self.__executeAllCommands();
-                self.selectSingleComment(d);
-
-                if (!isPosChanged) {
-                    self.isCommentEditing = true;
-                    if (d != null) {
-                        // ビューからスケール計算(DOM構築後じゃないと計算できないので、ここで計算)
-                        const sizeScale = self.svgManager.calcVirtualToPhysicalViewBoxScale();
-
-                        // ビューに依存してしまってるのをどうにかしたい
-                        const editControl = document.getElementById("editSelectedComment");
-                        const controlWidth = 170;
-                        const viewBoxMinScale = (svg.node().clientWidth / viewBoxWidth);
-                        const px = (d.x * sizeScale - controlWidth * 0.5) - self.svgManager.viewBoxMinX * viewBoxMinScale;;
-                        const py = d.y * sizeScale - self.svgManager.viewBoxMinY * viewBoxMinScale;
-                        editControl.style.left = `${px}px`;
-                        editControl.style.top = `${py}px`;
-
-                        // visibilityがビューに反映されるまでラグがあるので、
-                        // 少し後にテキストボックスにフォーカスする
-                        // 本当はDOMの更新が確実に終わってからフォーカスするようにした方がいい
-                        setTimeout(() => editControl.focus(), 100);
-                    }
-                }
-            }));
 
     const nodeKeyFunc = x => x.id;
     const nodeSelectionCircles = createOrUpdateGroupedSvgElems(svg, graph.nodes, "nodeCircle", "circle", nodeKeyFunc)
@@ -629,6 +660,59 @@ function updateGraphByD3js(
                 }
             }));
 
+    const comments = createOrUpdateGroupedSvgElems(svg, graph.comments, "comments", "text")
+        .attr("font-size", fontSize)
+        .style("text-anchor", "middle")
+        .attr("stroke", "black")
+        .style("text-shadow", `${edgeLabelShadowColor} ${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px ${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} 0px -${edgeLabelShadowSize}px 0px, ${edgeLabelShadowColor} -${edgeLabelShadowSize}px 0px 0px, ${edgeLabelShadowColor} ${edgeLabelShadowSize}px 0px 0px`)
+        .call(d3.drag()
+            .on("start", (e, d) => {
+                tempSerializedGraph = self.graph.toString();
+                d.startX = e.x;
+                d.startY = e.y;
+                d.fx = e.x;
+                d.fy = e.y;
+            })
+            .on("drag", (e, d) => {
+                d.fx = e.x;
+                d.fy = e.y;
+                d.x = d.fx;
+                d.y = d.fy;
+            })
+            .on("end", (e, d) => {
+                const isPosChanged = d.x != d.startX || d.y != d.startY;
+                d.startX = null;
+                d.startY = null;
+                d.fx = null;
+                d.fy = null;
+                self.selectSingleComment(d);
+
+                if (isPosChanged) {
+                    self.moveComment(d, d.x, d.y, tempSerializedGraph);
+                    self.__executeAllCommands();
+                }
+                else {
+                    self.beginEditComment(d);
+                    if (d != null) {
+                        // ビューからスケール計算(DOM構築後じゃないと計算できないので、ここで計算)
+                        const sizeScale = self.svgManager.calcVirtualToPhysicalViewBoxScale();
+
+                        // ビューに依存してしまってるのをどうにかしたい
+                        const editControl = document.getElementById("editSelectedComment");
+                        const controlWidth = 170;
+                        const viewBoxMinScale = (svg.node().clientWidth / viewBoxWidth);
+                        const px = (d.x * sizeScale - controlWidth * 0.5) - self.svgManager.viewBoxMinX * viewBoxMinScale;;
+                        const py = d.y * sizeScale - self.svgManager.viewBoxMinY * viewBoxMinScale;
+                        editControl.style.left = `${px}px`;
+                        editControl.style.top = `${py}px`;
+
+                        // visibilityがビューに反映されるまでラグがあるので、
+                        // 少し後にテキストボックスにフォーカスする
+                        // 本当はDOMの更新が確実に終わってからフォーカスするようにした方がいい
+                        setTimeout(() => editControl.focus(), 100);
+                    }
+                }
+            }));
 
     nodeImages
         .on("mouseover", (event, d) => {
@@ -691,9 +775,24 @@ function updateGraphByD3js(
                 .attr("y2", d => d.targetY)
                 ;
 
+            clusters
+                .attr("x", d => d.x)
+                .attr("y", d => d.y)
+                .attr("width", d => d.width)
+                .attr("height", d => d.height)
+                .attr("stroke", d => d.labelColor)
+                .style("fill", d => d.color)
+                ;
+
             edgeLabels
                 .attr("y", d => getEdgeLabelPositionY(d, fontSize))
                 .html(d => getEdgeLabel(d, fontSize));
+
+            clusterLabels
+                .attr("stroke", d => d.labelColor)
+                .style("text-shadow", d => getTextShadowStyle(d.labelShadowColor, edgeLabelShadowSize))
+                .attr("y", d => getClusterLabelPositionY(d, fontSize))
+                .html(d => getClusterLabel(d, fontSize));
 
             comments
                 .text(d => d.text)
